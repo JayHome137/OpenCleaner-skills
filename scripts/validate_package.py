@@ -22,6 +22,7 @@ REQUIRED_FILES = [
     SKILL_DIR / "scripts" / "scan.py",
     SKILL_DIR / "scripts" / "server.py",
     ROOT / "README.md",
+    ROOT / "LICENSE",
     ROOT / ".gitignore",
 ]
 
