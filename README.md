@@ -120,16 +120,6 @@ Skill 的流程是 agent 驱动的：
 - Windows 扫描和回收站逻辑已经包含在代码中，但首次在真实 Windows 环境使用前建议单独验证路径识别、权限边界和回收站行为。
 - 交互式删除能力依赖本地报告服务 `server.py`；如果直接打开静态 HTML 文件，只能查看报告和复制命令，不能调用本机文件操作。
 
-## 发布前验证
-
-运行：
-
-```bash
-python3 scripts/validate_package.py
-```
-
-验证内容包括：必需文件是否齐全、Python 脚本语法、`SKILL.md` frontmatter、`agents/openai.yaml` 元数据，以及静态报告生成链路。
-
 ## 许可证
 
 本项目使用 MIT License，详见 [LICENSE](LICENSE)。
