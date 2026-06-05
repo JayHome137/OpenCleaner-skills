@@ -58,8 +58,8 @@ def check_skill_frontmatter() -> None:
 def check_openai_yaml() -> None:
     text = (SKILL_DIR / "agents" / "openai.yaml").read_text(encoding="utf-8")
     required_snippets = [
-        'display_name: "Storage Analyzer"',
-        'default_prompt: "Use $storage-analyzer',
+        'display_name: "存储分析助手"',
+        'default_prompt: "使用 $storage-analyzer',
         "allow_implicit_invocation: true",
     ]
     for snippet in required_snippets:

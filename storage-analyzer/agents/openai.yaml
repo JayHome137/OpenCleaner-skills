@@ -1,8 +1,8 @@
 interface:
-  display_name: "Storage Analyzer"
+  display_name: "存储分析助手"
   short_description: "只读扫描磁盘占用并生成清理报告"
   brand_color: "#0F766E"
-  default_prompt: "Use $storage-analyzer to scan my computer storage and produce a risk-tiered cleanup report."
+  default_prompt: "使用 $storage-analyzer 扫描电脑存储空间，并生成分级清理报告。"
 
 policy:
   allow_implicit_invocation: true
