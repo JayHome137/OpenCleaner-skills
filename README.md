@@ -120,6 +120,12 @@ Skill 的流程是 agent 驱动的：
 - Windows 扫描和回收站逻辑已经包含在代码中，但首次在真实 Windows 环境使用前建议单独验证路径识别、权限边界和回收站行为。
 - 交互式删除能力依赖本地报告服务 `server.py`；如果直接打开静态 HTML 文件，只能查看报告和复制命令，不能调用本机文件操作。
 
+## 来源与修改说明
+
+本项目基于 [KKKKhazix/khazix-skills](https://github.com/KKKKhazix/khazix-skills) 仓库中的同名 `storage-analyzer` 技能修改而来。原仓库由 KKKKhazix 维护，并采用 MIT License。
+
+当前仓库在原技能基础上做了适配和整理，包括面向 Codex 的 Skill 打包结构、中文 README、平台适用说明、GitHub 发布结构、`agents/openai.yaml` 元数据，以及本仓库维护所需的验证脚本。
+
 ## 许可证
 
 本项目使用 MIT License，详见 [LICENSE](LICENSE)。
