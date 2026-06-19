@@ -21,15 +21,18 @@ REQUIRED_FILES = [
     SKILL_DIR / "scripts" / "build_report.py",
     SKILL_DIR / "scripts" / "scan.py",
     SKILL_DIR / "scripts" / "server.py",
+    ROOT / ".github" / "workflows" / "windows-validation.yml",
     ROOT / "README.md",
     ROOT / "LICENSE",
     ROOT / ".gitignore",
+    ROOT / "tests" / "windows_smoke.py",
 ]
 
 PYTHON_FILES = [
     SKILL_DIR / "scripts" / "build_report.py",
     SKILL_DIR / "scripts" / "scan.py",
     SKILL_DIR / "scripts" / "server.py",
+    ROOT / "tests" / "windows_smoke.py",
 ]
 
 
