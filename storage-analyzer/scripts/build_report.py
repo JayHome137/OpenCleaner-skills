@@ -28,7 +28,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE = os.path.join(HERE, "..", "assets", "report_template.html")
 
 
+def configure_text_output():
+    """Prefer UTF-8 console output on Windows runners and terminals."""
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 def main():
+    configure_text_output()
     if len(sys.argv) < 2:
         print(__doc__)
         sys.exit(1)

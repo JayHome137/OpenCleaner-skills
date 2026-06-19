@@ -104,6 +104,8 @@ def check_static_report_generation() -> None:
             [sys.executable, str(SKILL_DIR / "scripts" / "build_report.py"), str(analysis), str(output)],
             cwd=ROOT,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             check=False,

@@ -26,6 +26,13 @@ import time
 HOME = os.path.expanduser("~")
 
 
+def configure_text_output():
+    """Prefer UTF-8 console output on Windows runners and terminals."""
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
+
 def human(kb):
     """KB number -> human string like '12.3 GB'."""
     n = float(kb) * 1024
@@ -297,6 +304,7 @@ def scan_windows():
 
 # ======================================================================
 def main():
+    configure_text_output()
     started = time.time()
     if sys.platform == "darwin":
         system, groups = scan_macos()
