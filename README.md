@@ -32,9 +32,11 @@
 
 这个项目不追求“自动删得最快”，而是追求“判断和边界清楚”。绿灯只放可再生缓存，黄灯保留给有用户数据的目录，红灯只覆盖适合正规卸载的应用本体。这样能减少误删，也方便用户自己决定要不要动。
 
-## 来源
+## 来源与修改说明
 
-本项目基于 [KKKKhazix/khazix-skills](https://github.com/KKKKhazix/khazix-skills) 中的同名 `storage-analyzer` 技能修改而来，原仓库采用 MIT License。
+本项目基于 [KKKKhazix/khazix-skills](https://github.com/KKKKhazix/khazix-skills) 仓库中的同名 `storage-analyzer` 技能修改而来。原仓库由 KKKKhazix 维护，并采用 MIT License。
+
+当前仓库在原技能基础上做了适配和整理，包括面向 Codex 的 Skill 打包结构、中文 README、平台适用说明、GitHub 发布结构、`agents/openai.yaml` 元数据，以及本仓库维护所需的验证脚本。
 
 ## 许可证
 
