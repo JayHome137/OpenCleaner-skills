@@ -25,7 +25,7 @@
 | 平台 | 状态 | 说明 |
 | --- | --- | --- |
 | macOS | 完整实现并实测 | 支持只读扫描、容量分组、报告生成、交互式本地服务、访达打开、移到废纸篓和白名单内直接删除。 |
-| Windows | 代码已包含，需实机复核 | `scan.py` 已实现 Windows 扫描逻辑，`server.py` 已实现 Windows 回收站逻辑；首次在真实 Windows 使用前，建议验证 Python 命令、盘符扫描、路径权限和回收站行为。 |
+| Windows | 已通过基础验证 | `scan.py` 已实现 Windows 扫描逻辑，`server.py` 已实现 Windows 回收站逻辑，并已通过 GitHub Actions 的 Windows runner 基础验证；仍建议在普通用户真实 Windows 主机上补一轮人工场景测试。 |
 | Linux | 暂未作为目标平台 | 当前 `SKILL.md` 和参考资料主要覆盖 macOS / Windows；Linux 可以参考脚本结构扩展，但不是现成支持目标。 |
 
 本机是 Mac 时，优先使用 macOS 流程。Windows 也可以使用，但需要先安装 Python 3，并把命令里的 `python3` 改成 `python` 或 `py -3`。
@@ -117,7 +117,7 @@ Skill 的流程是 agent 驱动的：
 - 仅依赖 Python 3 标准库，不需要安装第三方包。
 - macOS 自带 `python3`、`du`、`diskutil`、`osascript`，是目前主要实测平台。
 - Windows 需要用户自行安装 Python 3，常用命令是 `python` 或 `py -3`。
-- Windows 扫描和回收站逻辑已经包含在代码中，但首次在真实 Windows 环境使用前建议单独验证路径识别、权限边界和回收站行为。
+- Windows 扫描和回收站逻辑已经包含在代码中，并已通过 GitHub Actions Windows runner 的基础验证；真实用户机器上的目录权限、杀毒软件策略和非英文路径仍建议补人工测试。
 - 交互式删除能力依赖本地报告服务 `server.py`；如果直接打开静态 HTML 文件，只能查看报告和复制命令，不能调用本机文件操作。
 
 ## 来源与修改说明

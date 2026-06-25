@@ -108,7 +108,7 @@ pills 只渲染解析出的纯数字（如"约 5.5 GB"），不显示数据里�
 ## 平台状态
 
 - **macOS**：完整实现并实测（扫描 / 报告 / 一键删除全验证过）。
-- **Windows**：代码已写（`scan.py` 的 `scan_windows`、`server.py` 的 `_trash_windows` 走 `SHFileOperationW`），但**未在真实 Windows 上实测**。首次在 Windows 跑要核对：目标目录路径、`os.scandir` 大小、回收站删除是否正常。多盘符已支持（主盘分段条 + 其他盘列表）。
+- **Windows**：代码已写（`scan.py` 的 `scan_windows`、`server.py` 的 `_trash_windows` 走 `SHFileOperationW`），并已通过 GitHub Actions Windows runner 的基础验证。仍建议在普通用户真实 Windows 主机上核对：目标目录路径、`os.scandir` 大小、回收站删除、Explorer 打开和权限边界。多盘符已支持（主盘分段条 + 其他盘列表）。
 
 ## 长期优化建议素材（写进报告 summary.long_term）
 
