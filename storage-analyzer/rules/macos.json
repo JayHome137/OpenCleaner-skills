@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "rules": [
+    {
+      "id": "macos.library-cache-entry",
+      "platforms": ["darwin"],
+      "root": "${HOME}/Library/Caches",
+      "min_depth": 1,
+      "actions": ["trash"],
+      "classification": "green",
+      "recovery": "对应应用会在下次启动或使用时重建缓存。",
+      "risk": "应用首次启动可能变慢，离线内容可能需要重新下载。",
+      "non_targets": ["~/Library/Caches 根目录本身", "~/Library/Application Support", "容器数据和钥匙串"],
+      "blocked_components": ["com.apple.keychain", "credentials", "secrets"]
+    },
+    {
+      "id": "macos.xcode-derived-data-entry",
+      "platforms": ["darwin"],
+      "root": "${HOME}/Library/Developer/Xcode/DerivedData",
+      "min_depth": 1,
+      "actions": ["trash"],
+      "classification": "green",
+      "recovery": "Xcode 会在下一次构建时重新生成派生数据。",
+      "risk": "下一次索引和构建耗时会增加。",
+      "non_targets": ["Xcode Archives", "项目源代码", "DerivedData 根目录本身"],
+      "blocked_components": []
+    },
+    {
+      "id": "macos.pnpm-cache-entry",
+      "platforms": ["darwin"],
+      "root": "${HOME}/Library/pnpm/store",
+      "min_depth": 1,
+      "actions": ["trash"],
+      "classification": "green",
+      "recovery": "pnpm 会按需重新下载缺失的内容。",
+      "risk": "后续安装依赖需要重新下载，离线环境中可能暂时不可用。",
+      "non_targets": ["项目 node_modules", "pnpm 配置和认证信息", "store 根目录本身"],
+      "blocked_components": ["credentials", "secrets"]
+    }
+  ]
+}

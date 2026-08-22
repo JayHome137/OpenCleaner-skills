@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://storage-analyzer.local/schemas/analysis.schema.json",
+  "title": "Storage Analyzer analysis",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "source_scan_sha256",
+    "generated_at",
+    "system",
+    "top5",
+    "green",
+    "yellow",
+    "red",
+    "summary"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "source_scan_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "generated_at": {"type": "string"},
+    "scan_seconds": {"type": "number", "minimum": 0},
+    "system": {
+      "type": "object",
+      "required": ["os", "home"],
+      "properties": {"os": {"type": "string"}, "home": {"type": "string"}}
+    },
+    "top5": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["rank", "tier", "size", "type", "name", "path", "note"],
+        "properties": {
+          "rank": {"type": "integer", "minimum": 1},
+          "tier": {"enum": ["green", "yellow", "red"]},
+          "size": {"type": "string"},
+          "type": {"type": "string"},
+          "name": {"type": "string"},
+          "path": {"type": "string"},
+          "note": {"type": "string"}
+        }
+      }
+    },
+    "green": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name", "path", "size_estimate", "kill_processes", "trash_paths", "commands",
+          "rule_id", "rule_reason", "rule_risk", "rule_non_targets"
+        ],
+        "properties": {
+          "name": {"type": "string"},
+          "path": {"type": "string"},
+          "size_estimate": {"type": "string"},
+          "kill_processes": {"type": "array", "items": {"type": "string"}},
+          "trash_paths": {"type": "array", "items": {"type": "string"}},
+          "commands": {"type": "array"},
+          "rule_id": {"type": "string"},
+          "rule_reason": {"type": "string"},
+          "rule_risk": {"type": "string"},
+          "rule_non_targets": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "yellow": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "path", "size", "content_profile", "why_manual", "disposal", "risk"],
+        "properties": {
+          "name": {"type": "string"},
+          "path": {"type": "string"},
+          "size": {"type": "string"},
+          "content_profile": {"type": "string"},
+          "why_manual": {"type": "string"},
+          "disposal": {"type": "string"},
+          "risk": {"type": "string"},
+          "trash_paths": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "red": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "path", "size", "why_keep", "indirect_release", "auto_reclaim"],
+        "properties": {
+          "name": {"type": "string"},
+          "path": {"type": "string"},
+          "size": {"type": "string"},
+          "why_keep": {"type": "string"},
+          "indirect_release": {"type": "string"},
+          "auto_reclaim": {"type": "string"},
+          "app_paths": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "denied": {"type": "array", "items": {"type": "string"}},
+    "summary": {
+      "type": "object",
+      "required": ["overview", "tier_stats", "priority", "long_term"],
+      "properties": {
+        "overview": {"type": "string"},
+        "tier_stats": {
+          "type": "object",
+          "required": ["green", "yellow", "red"],
+          "properties": {
+            "green": {"type": "string"},
+            "yellow": {"type": "string"},
+            "red": {"type": "string"}
+          }
+        },
+        "priority": {"type": "array", "items": {"type": "string"}},
+        "long_term": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  },
+  "additionalProperties": true
+}

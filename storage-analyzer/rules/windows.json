@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "rules": [
+    {
+      "id": "windows.temp-entry",
+      "platforms": ["win32"],
+      "root": "${TEMP}",
+      "min_depth": 1,
+      "actions": ["trash"],
+      "classification": "green",
+      "recovery": "临时文件由应用在需要时重新创建。",
+      "risk": "正在运行的应用可能仍在使用部分临时文件，操作前应关闭相关应用。",
+      "non_targets": ["TEMP 根目录本身", "正在使用的锁定文件", "TEMP 之外的用户数据"],
+      "blocked_components": ["credentials", "secrets"]
+    },
+    {
+      "id": "windows.pip-cache",
+      "platforms": ["win32"],
+      "root": "${LOCALAPPDATA}/pip/Cache",
+      "min_depth": 0,
+      "actions": ["trash"],
+      "classification": "green",
+      "recovery": "pip 会按需重新下载包。",
+      "risk": "后续安装 Python 包需要重新下载，离线环境中可能暂时不可用。",
+      "non_targets": ["pip 配置文件", "Python 虚拟环境", "用户项目和源码"],
+      "blocked_components": []
+    },
+    {
+      "id": "windows.go-build-cache",
+      "platforms": ["win32"],
+      "root": "${LOCALAPPDATA}/go-build",
+      "min_depth": 0,
+      "actions": ["trash"],
+      "classification": "green",
+      "recovery": "Go 会在下一次构建时重新生成编译缓存。",
+      "risk": "下一次 Go 构建耗时会增加。",
+      "non_targets": ["GOMODCACHE", "Go 工作区源码", "go-build 之外的工具配置"],
+      "blocked_components": []
+    }
+  ]
+}

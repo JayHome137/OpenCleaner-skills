@@ -1,0 +1,41 @@
+{
+  "schema_version": "1.0",
+  "rules": [
+    {
+      "id": "common.user-cache-entry",
+      "platforms": ["darwin", "win32"],
+      "root": "${HOME}/.cache",
+      "min_depth": 1,
+      "actions": ["trash"],
+      "classification": "green",
+      "recovery": "应用或工具会在下次使用时重新生成缓存。",
+      "risk": "首次重新打开相关工具时可能需要重新下载或重新计算内容。",
+      "non_targets": [".cache 根目录本身", "凭据、密钥和用户配置目录", "符号链接目标"],
+      "blocked_components": ["credentials", "secrets", "keychains"]
+    },
+    {
+      "id": "common.npm-content-cache",
+      "platforms": ["darwin", "win32"],
+      "root": "${HOME}/.npm/_cacache",
+      "min_depth": 0,
+      "actions": ["trash"],
+      "classification": "green",
+      "recovery": "npm 会按需重新下载包内容。",
+      "risk": "后续安装依赖需要重新下载，离线环境中可能暂时不可用。",
+      "non_targets": ["~/.npmrc", "npm 登录凭据", "_cacache 之外的 npm 配置和日志"],
+      "blocked_components": []
+    },
+    {
+      "id": "common.gradle-cache-entry",
+      "platforms": ["darwin", "win32"],
+      "root": "${HOME}/.gradle/caches",
+      "min_depth": 1,
+      "actions": ["trash"],
+      "classification": "green",
+      "recovery": "Gradle 会重新生成构建缓存并重新下载依赖。",
+      "risk": "下一次构建会变慢，并可能需要网络重新获取依赖。",
+      "non_targets": ["~/.gradle/gradle.properties", "Gradle 凭据", "caches 根目录本身"],
+      "blocked_components": ["credentials", "secrets"]
+    }
+  ]
+}

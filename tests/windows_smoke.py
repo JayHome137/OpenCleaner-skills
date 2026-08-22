@@ -1,48 +1,37 @@
 #!/usr/bin/env python3
-"""Windows smoke test for storage-analyzer.
-
-This test is intentionally small and safe. It runs on a temporary profile tree,
-checks the Windows scanner shape, builds a static report, and verifies the
-Windows recycle-bin helper against a disposable temp file.
-"""
+"""Windows end-to-end smoke test using only disposable temporary data."""
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 import sys
 import tempfile
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS = ROOT / "storage-analyzer" / "scripts"
+sys.path.insert(0, str(SCRIPTS))
+
+import build_report
+import classify
+import contracts
+import file_ops
+import policy
+import scan
 
 
-def load_module(name: str, path: Path):
-    spec = importlib.util.spec_from_file_location(name, path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"无法加载模块: {path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-def make_file(path: Path, size_mb: int) -> None:
+def make_sparse_file(path: Path, size_mb: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("wb") as f:
-        f.truncate(size_mb * 1024 * 1024)
+    with path.open("wb") as handle:
+        handle.truncate(size_mb * 1024 * 1024)
 
 
 def main() -> None:
     if not sys.platform.startswith("win"):
         raise SystemExit("windows_smoke.py 只能在 Windows 上运行")
 
-    scan = load_module("storage_scan", ROOT / "storage-analyzer" / "scripts" / "scan.py")
-    build_report = load_module("build_report", ROOT / "storage-analyzer" / "scripts" / "build_report.py")
-    server = load_module("storage_server", ROOT / "storage-analyzer" / "scripts" / "server.py")
-
-    with tempfile.TemporaryDirectory(prefix="storage-analyzer-win-") as tmp:
-        base = Path(tmp)
+    with tempfile.TemporaryDirectory(prefix="storage-analyzer-win-") as temporary:
+        base = Path(temporary)
         profile = base / "Users" / "alice"
         local = profile / "AppData" / "Local"
         roaming = profile / "AppData" / "Roaming"
@@ -50,34 +39,48 @@ def main() -> None:
         downloads = profile / "Downloads"
         program_files = base / "Program Files"
         program_files_x86 = base / "Program Files (x86)"
-
         for path in (profile, local, roaming, temp, downloads, program_files, program_files_x86):
             path.mkdir(parents=True, exist_ok=True)
 
-        make_file(downloads / "installer.iso", 120)
-        make_file(temp / "temp-cache.bin", 70)
-        make_file(profile / ".npm" / "npm-cache.bin", 80)
-        make_file(local / "pip" / "Cache" / "pip-cache.bin", 90)
-        make_file(roaming / "profile-data.bin", 65)
-        make_file(local / "app-cache.bin", 75)
+        make_sparse_file(downloads / "installer.iso", 70)
+        make_sparse_file(temp / "temp-cache.bin", 60)
+        make_sparse_file(profile / ".npm" / "_cacache" / "cache.bin", 60)
+        make_sparse_file(local / "pip" / "Cache" / "pip-cache.bin", 60)
+        make_sparse_file(roaming / "profile-data.bin", 60)
 
-        old_env = os.environ.copy()
+        original_environment = os.environ.copy()
         os.environ.update(
             {
                 "USERPROFILE": str(profile),
+                "HOME": str(profile),
                 "LOCALAPPDATA": str(local),
                 "APPDATA": str(roaming),
                 "TEMP": str(temp),
                 "USERNAME": "alice",
                 "ProgramFiles": str(program_files),
                 "ProgramFiles(x86)": str(program_files_x86),
+                "STORAGE_ANALYZER_STATE_DIR": str(base / "state"),
             }
         )
         try:
-            system, groups = scan.scan_windows()
+            scan_result = scan.scan_current(platform="win32", max_workers=2, timeout_seconds=20)
+            contracts.validate_scan_result(scan_result)
+            analysis = classify.build_analysis(scan_result)
+            action_plan = policy.build_action_plan(analysis, platform="win32")
+            session_plan = policy.build_action_plan(
+                analysis, platform="win32", purpose="session"
+            )
+            session_policy = policy.SafetyPolicy(platform="win32")
+            case_action = session_policy.authorize(
+                str(temp / "temp-cache.bin").swapcase(),
+                "trash",
+                "green",
+                "windows.temp-entry",
+            )
+            assert case_action["rule_id"] == "windows.temp-entry"
         finally:
             os.environ.clear()
-            os.environ.update(old_env)
+            os.environ.update(original_environment)
 
         required_groups = {
             "user_profile",
@@ -89,53 +92,42 @@ def main() -> None:
             "program_files_x86",
             "dev_caches",
         }
-        missing = required_groups - groups.keys()
-        assert not missing, f"缺少 Windows 分组: {sorted(missing)}"
-        assert system["disks"], "Windows runner 应至少枚举到一个盘符"
-        assert any(item["name"] == "Downloads" for item in groups["user_profile"])
-        assert any(item["name"] == "installer.iso" for item in groups["downloads"])
-        assert any(item["path"].endswith(".npm") or item["path"].endswith("pip\\Cache") for item in groups["dev_caches"])
+        assert required_groups <= scan_result["groups"].keys()
+        assert scan_result["coverage"]["completed_roots"] > 0
+        assert any(item["name"] == "installer.iso" for item in scan_result["groups"]["downloads"])
+        assert any(item["name"] == "temp-cache.bin" for item in scan_result["groups"]["temp"])
+        assert any(item["rule_id"] == "windows.temp-entry" for item in analysis["green"])
+        assert action_plan["actions"], "deterministic rules should authorize disposable cache actions"
+        assert action_plan["purpose"] == "dry-run" and action_plan["dry_run"] is True
+        assert all(action["mode"] in ("open", "trash") for action in action_plan["actions"])
 
-        analysis = {
-            "generated_at": "2026-06-19 00:00:00",
-            "system": system,
-            "top5": [],
-            "green": [
-                {
-                    "name": "临时测试缓存",
-                    "path": str(temp),
-                    "size_estimate": "约 70 MB",
-                    "kill_processes": [],
-                    "trash_paths": [str(temp / "temp-cache.bin")],
-                    "commands": [],
-                }
-            ],
-            "yellow": [],
-            "red": [],
-            "summary": {
-                "overview": "Windows smoke test report.",
-                "tier_stats": {"green": "约 0.1 GB", "yellow": "约 0 GB", "red": "约 0 GB"},
-                "priority": [],
-                "long_term": [],
-            },
-        }
         analysis_path = base / "analysis.json"
         report_path = base / "report.html"
         analysis_path.write_text(json.dumps(analysis, ensure_ascii=False), encoding="utf-8")
-        old_argv = sys.argv[:]
-        try:
-            sys.argv = ["build_report.py", str(analysis_path), str(report_path)]
-            build_report.main()
-        finally:
-            sys.argv = old_argv
+        build_report.build_report(str(analysis_path), str(report_path))
         html = report_path.read_text(encoding="utf-8")
-        assert "Windows smoke test report." in html
+        assert "存储分析报告" in html
         assert "__REPORT_DATA__" not in html
+        assert "直接删除" not in html
 
-        recycle_probe = base / "recycle-probe.txt"
-        recycle_probe.write_text("disposable", encoding="utf-8")
-        server._trash_windows(str(recycle_probe))
-        assert not recycle_probe.exists(), "SHFileOperationW 后文件仍在原路径"
+        trash_action = next(
+            action
+            for action in session_plan["actions"]
+            if action["mode"] == "trash" and action["canonical_path"].endswith("temp-cache.bin")
+        )
+        operator = file_ops.FileOperator(
+            session_policy,
+            file_ops.OperationLog(base / "state"),
+        )
+        operation = operator.execute(
+            trash_action,
+            session_plan["plan_id"],
+            session_plan["purpose"],
+        )
+        assert operation["status"] == "completed", operation
+        assert operation["target_exists_after"] is False
+        assert "disk_free_delta_bytes" in operation
+        assert not (temp / "temp-cache.bin").exists()
 
     print("WINDOWS_SMOKE_OK")
 

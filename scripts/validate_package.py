@@ -1,38 +1,59 @@
 #!/usr/bin/env python3
-"""Validate the GitHub package layout for the storage-analyzer skill."""
+"""Validate the distributable Skill layout, contracts, and safety invariants."""
 from __future__ import annotations
 
+import hashlib
 import json
 import py_compile
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL_DIR = ROOT / "storage-analyzer"
+SCRIPTS_DIR = SKILL_DIR / "scripts"
 
 REQUIRED_FILES = [
+    ROOT / "PROJECT_GOALS.md",
+    ROOT / "THIRD_PARTY_NOTICES.md",
+    ROOT / "docs" / "BASELINE.md",
+    ROOT / "docs" / "ACCEPTANCE_MATRIX.md",
+    ROOT / "docs" / "LICENSING_PLAN.md",
+    ROOT / "docs" / "INDEPENDENCE_AUDIT.md",
+    ROOT / "docs" / "PROVENANCE.md",
+    ROOT / "docs" / "PERFORMANCE_BASELINE.md",
     SKILL_DIR / "SKILL.md",
     SKILL_DIR / "agents" / "openai.yaml",
     SKILL_DIR / "assets" / "report_template.html",
     SKILL_DIR / "references" / "macos.md",
     SKILL_DIR / "references" / "windows.md",
-    SKILL_DIR / "scripts" / "build_report.py",
-    SKILL_DIR / "scripts" / "scan.py",
-    SKILL_DIR / "scripts" / "server.py",
+    SKILL_DIR / "schemas" / "scan-result.schema.json",
+    SKILL_DIR / "schemas" / "analysis.schema.json",
+    SKILL_DIR / "schemas" / "action-plan.schema.json",
+    SKILL_DIR / "rules" / "common.json",
+    SKILL_DIR / "rules" / "macos.json",
+    SKILL_DIR / "rules" / "windows.json",
+    SCRIPTS_DIR / "build_report.py",
+    SCRIPTS_DIR / "classify.py",
+    SCRIPTS_DIR / "contracts.py",
+    SCRIPTS_DIR / "file_ops.py",
+    SCRIPTS_DIR / "policy.py",
+    SCRIPTS_DIR / "rules.py",
+    SCRIPTS_DIR / "scan.py",
+    SCRIPTS_DIR / "server.py",
+    SCRIPTS_DIR / "validate_plan.py",
+    ROOT / ".github" / "workflows" / "macos-validation.yml",
     ROOT / ".github" / "workflows" / "windows-validation.yml",
     ROOT / "README.md",
     ROOT / "LICENSE",
+    ROOT / "NOTICE",
+    ROOT / "VERSION",
+    ROOT / "COMMERCIAL_LICENSE.md",
     ROOT / ".gitignore",
     ROOT / "tests" / "windows_smoke.py",
-]
-
-PYTHON_FILES = [
-    SKILL_DIR / "scripts" / "build_report.py",
-    SKILL_DIR / "scripts" / "scan.py",
-    SKILL_DIR / "scripts" / "server.py",
-    ROOT / "tests" / "windows_smoke.py",
+    ROOT / "tests" / "macos_smoke.py",
+    ROOT / "tests" / "fixtures" / "sample_analysis.json",
+    ROOT / "scripts" / "benchmark_scan.py",
 ]
 
 
@@ -42,7 +63,7 @@ def fail(message: str) -> None:
 
 
 def check_required_files() -> None:
-    missing = [str(path.relative_to(ROOT)) for path in REQUIRED_FILES if not path.exists()]
+    missing = [str(path.relative_to(ROOT)) for path in REQUIRED_FILES if not path.is_file()]
     if missing:
         fail("missing required files: " + ", ".join(missing))
 
@@ -52,38 +73,134 @@ def check_skill_frontmatter() -> None:
     if not text.startswith("---\n"):
         fail("storage-analyzer/SKILL.md must start with YAML frontmatter")
     frontmatter = text.split("---", 2)[1]
-    if "name: storage-analyzer" not in frontmatter:
-        fail("SKILL.md frontmatter must include name: storage-analyzer")
-    if "description:" not in frontmatter:
-        fail("SKILL.md frontmatter must include description")
+    for snippet in ("name: storage-analyzer", "description:"):
+        if snippet not in frontmatter:
+            fail(f"SKILL.md frontmatter missing: {snippet}")
 
 
 def check_openai_yaml() -> None:
     text = (SKILL_DIR / "agents" / "openai.yaml").read_text(encoding="utf-8")
-    required_snippets = [
+    for snippet in (
         'display_name: "存储分析助手"',
         'default_prompt: "使用 $storage-analyzer',
         "allow_implicit_invocation: true",
-    ]
-    for snippet in required_snippets:
+    ):
         if snippet not in text:
             fail(f"agents/openai.yaml missing expected snippet: {snippet}")
 
 
+def check_licensing() -> None:
+    version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    if version != "1.0.0":
+        fail(f"unexpected project version: {version}")
+
+    license_bytes = (ROOT / "LICENSE").read_bytes()
+    license_sha256 = hashlib.sha256(license_bytes).hexdigest()
+    expected_sha256 = "ffcca38841adb694b6f380647e15f17c446a4d1656fed51a1e2041d064c94cc8"
+    if license_sha256 != expected_sha256:
+        fail("LICENSE must match the official PolyForm Noncommercial 1.0.0 plain text")
+
+    notice = (ROOT / "NOTICE").read_text(encoding="utf-8")
+    for snippet in (
+        "Required Notice: Copyright (c) 2026 JayHome137.",
+        "Storage Analyzer version 1.0.0",
+        "GitHub repository maintainers",
+    ):
+        if snippet not in notice:
+            fail(f"NOTICE missing expected licensing text: {snippet}")
+
+    commercial = (ROOT / "COMMERCIAL_LICENSE.md").read_text(encoding="utf-8")
+    for snippet in (
+        "Commercial use is not granted",
+        "separate written commercial license",
+        "GitHub repository maintainers",
+        "not itself a commercial license grant",
+    ):
+        if snippet not in commercial:
+            fail(f"COMMERCIAL_LICENSE.md missing expected text: {snippet}")
+
+    third_party = (ROOT / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
+    for snippet in ("MIT License", "Copyright (c) 2026 数字生命卡兹克"):
+        if snippet not in third_party:
+            fail(f"THIRD_PARTY_NOTICES.md missing retained MIT notice: {snippet}")
+
+
 def check_python_syntax() -> None:
-    for path in PYTHON_FILES:
-        py_compile.compile(str(path), doraise=True)
+    python_files = sorted(SCRIPTS_DIR.glob("*.py")) + sorted((ROOT / "tests").glob("*.py"))
+    with tempfile.TemporaryDirectory(prefix="storage-pycompile-") as temporary:
+        for index, path in enumerate(python_files):
+            try:
+                py_compile.compile(str(path), cfile=str(Path(temporary) / f"{index}.pyc"), doraise=True)
+            except py_compile.PyCompileError as exc:
+                fail(str(exc))
 
 
-def check_static_report_generation() -> None:
+def check_json_files() -> None:
+    for path in sorted((SKILL_DIR / "schemas").glob("*.json")) + sorted((SKILL_DIR / "rules").glob("*.json")):
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            fail(f"invalid JSON in {path.relative_to(ROOT)}: {exc}")
+        if value.get("schema_version") != "1.0" and "$schema" not in value:
+            fail(f"missing schema version in {path.relative_to(ROOT)}")
+        if path.parent.name == "rules":
+            for index, rule in enumerate(value.get("rules", [])):
+                for field in (
+                    "id",
+                    "platforms",
+                    "root",
+                    "min_depth",
+                    "actions",
+                    "classification",
+                    "recovery",
+                    "risk",
+                    "non_targets",
+                    "blocked_components",
+                ):
+                    if field not in rule:
+                        fail(f"rule {path.name}[{index}] missing required field: {field}")
+
+
+def check_no_permanent_delete_surface() -> None:
+    runtime_files = [SCRIPTS_DIR / "server.py", SCRIPTS_DIR / "file_ops.py"]
+    forbidden = ("shutil.rmtree", "os.remove(", "os.unlink(", 'mode == "rm"', "直接删除")
+    for path in runtime_files:
+        text = path.read_text(encoding="utf-8")
+        for snippet in forbidden:
+            if snippet in text:
+                fail(f"permanent delete surface found in {path.relative_to(ROOT)}: {snippet}")
+    template = (SKILL_DIR / "assets" / "report_template.html").read_text(encoding="utf-8")
+    if "直接删除" in template or "'rm'" in template or '"rm"' in template:
+        fail("report template still exposes permanent delete")
+    for legacy in ("data-paths", "authorizedPaths", "postAction"):
+        if legacy in template:
+            fail(f"report template still contains legacy path request logic: {legacy}")
+    for required in ("本次操作历史", "rule_non_targets", "disk_free_delta_bytes"):
+        if required not in template:
+            fail(f"report template missing guarded result surface: {required}")
+
+
+def check_runtime_imports_and_static_report() -> None:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+    try:
+        import build_report
+        import contracts
+    except ImportError as exc:
+        fail(f"runtime import failed: {exc}")
     sample = {
-        "generated_at": "2026-06-05 00:00:00",
+        "schema_version": "1.0",
+        "source_scan_sha256": "0" * 64,
+        "generated_at": "2026-08-22 00:00:00",
+        "scan_seconds": 0,
         "system": {
             "os": "macOS",
+            "home": "/Users/example",
             "disk_total": "100 GB",
             "disk_used": "60 GB",
             "disk_free": "40 GB",
+            "disks": [],
         },
+        "coverage": {"requested_roots": 1, "completed_roots": 1, "skipped_roots": 0},
         "top5": [],
         "green": [],
         "yellow": [],
@@ -95,34 +212,22 @@ def check_static_report_generation() -> None:
             "long_term": [],
         },
     }
-    with tempfile.TemporaryDirectory() as tmp:
-        tmpdir = Path(tmp)
-        analysis = tmpdir / "analysis.json"
-        output = tmpdir / "report.html"
-        analysis.write_text(json.dumps(sample, ensure_ascii=False), encoding="utf-8")
-        result = subprocess.run(
-            [sys.executable, str(SKILL_DIR / "scripts" / "build_report.py"), str(analysis), str(output)],
-            cwd=ROOT,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=False,
-        )
-        if result.returncode != 0:
-            fail("build_report.py failed:\n" + result.stderr)
-        html = output.read_text(encoding="utf-8")
-        if "Sample validation report." not in html or "__REPORT_DATA__" in html:
-            fail("static report output did not receive embedded sample data")
+    contracts.validate_analysis(sample)
+    template = (SKILL_DIR / "assets" / "report_template.html").read_text(encoding="utf-8")
+    html = build_report.render_report(sample, template)
+    if "Sample validation report." not in html or "__REPORT_DATA__" in html:
+        fail("static report output did not receive validated sample data")
 
 
 def main() -> None:
     check_required_files()
     check_skill_frontmatter()
     check_openai_yaml()
+    check_licensing()
     check_python_syntax()
-    check_static_report_generation()
+    check_json_files()
+    check_no_permanent_delete_surface()
+    check_runtime_imports_and_static_report()
     print("storage-analyzer package validation passed")
 
 

@@ -1,33 +1,37 @@
-# Windows 数据布局与分级参考
+# Windows 分析边界
 
-分析 Windows 扫描结果时读这份。讲"东西存在哪、怎么辨认、归哪一级"。
-注意：Windows 代码路径在 macOS 上无法验证，分析时对路径存在性保持谨慎。
+## 可由规则授权的范围
+
+| 规则 | 允许目标 | 限制 |
+| --- | --- | --- |
+| `windows.temp-entry` | `%TEMP%` 下的具体子项 | 不允许整体操作 Temp 根目录。 |
+| `windows.pip-cache` | `%LOCALAPPDATA%\pip\Cache` | 仅包下载缓存。 |
+| `windows.go-build-cache` | `%LOCALAPPDATA%\go-build` | 仅 Go 编译缓存。 |
+| `common.user-cache-entry` | `%USERPROFILE%\.cache` 下的具体子项 | 未知模型或应用状态可提高为黄灯。 |
+| `common.npm-content-cache` | `%USERPROFILE%\.npm\_cacache` | 不包含 npm 用户配置。 |
+| `common.gradle-cache-entry` | `%USERPROFILE%\.gradle\caches` 下的具体子项 | 不包含项目、wrapper 和用户配置。 |
+
+规则目标仍必须位于真实用户主目录内，并通过路径、符号链接、文件身份和短期计划复核。
+
+## 必须人工判断的范围
+
+- `%APPDATA%`：漫游配置、数据库和用户状态，默认黄灯。
+- `%LOCALAPPDATA%` 中未命中规则的应用目录：可能同时包含缓存和核心数据。
+- `Downloads` 和其他盘符：可能是用户唯一副本，不按扩展名或文件年龄自动授权。
+- 浏览器 Profile：只有明确缓存子目录才可能进入规则，书签、登录态和扩展数据保持黄灯。
+- `.nuget\packages`、`.m2`、模型目录和大型工具链：重下载成本或状态不明确，默认黄灯。
+
+## 应用和系统内容
+
+- `Program Files` 和 `Program Files (x86)` 只用于识别应用体积，不由报告服务删除。
+- `Windows`、`WinSxS`、更新缓存、`pagefile.sys` 和 `hiberfil.sys` 不进入文件操作计划。
+- 系统内容通过 Windows 设置、存储感知、磁盘清理或应用卸载入口处理。
+- 需要管理员权限的目标只提供说明。
 
 ## 多盘符
 
-Windows 通常多个盘（C:、D:…）。磁盘总览会列出所有盘，但**分析和清理聚焦系统盘 C:**——缓存、AppData、临时文件几乎都在 C:。其他盘（D: 等）一般是用户自存的资料/游戏，归 🟡 让用户自己判断，不要自动给删除按钮。
+报告展示所有检测到的盘符，但规则只授权当前用户主目录中的确定性目标。D:、E: 等用户数据盘默认黄灯，除非未来增加具有恢复证据和独立测试的明确规则。
 
-## 关键目录
+## Recycle Bin 行为
 
-| 目录（环境变量） | 装什么 | 典型分级 |
-|---|---|---|
-| `%LOCALAPPDATA%`（`C:\Users\<u>\AppData\Local`） | 浏览器缓存、应用数据、Temp，最大头 | 缓存 🟢 / 应用数据 🟡 |
-| `%LOCALAPPDATA%\Temp`、`%TEMP%` | 临时文件 | 🟢 |
-| `%APPDATA%`（Roaming） | 应用配置/数据 | 🟡 |
-| 浏览器缓存 `%LOCALAPPDATA%\Google\Chrome\User Data\*\Cache`、Edge 同构 | 浏览器缓存 | 🟢 |
-| 浏览器 `User Data\<Profile>`（非 Cache 部分） | 书签/登录态 | 🟡 |
-| `%USERPROFILE%\.cache`、`.npm`、`.gradle`、`.m2`、`.nuget\packages`、`%LOCALAPPDATA%\pip\Cache`、`Yarn` | 开发缓存 | 🟢 |
-| `C:\Program Files`、`Program Files (x86)` | 应用本体 | 🔴 仅重复/想卸时上灯，否则归蓝色 |
-| `%USERPROFILE%\Downloads` 的安装包 | exe/msi 残留 | 🟢 |
-| `C:\$Recycle.Bin` | 回收站 | 🟡 提示用户清空 |
-
-## 系统占用（不上灯，归蓝色"系统及其他"，间接释放写 long_term）
-
-- `C:\Windows\WinSxS`：组件存储，**绝不能手删**，用 `DISM /Online /Cleanup-Image /StartComponentCleanup`
-- `C:\Windows\SoftwareDistribution\Download`：Windows Update 缓存，用磁盘清理处理
-- `hiberfil.sys`（休眠）、`pagefile.sys`（虚拟内存）：系统管理，别手动删
-- 间接释放：设置 > 系统 > 存储 > 存储感知；`cleanmgr`（磁盘清理）；扩展磁盘清理选 Windows 更新清理
-
-## 删除机制
-
-`server.py` 在 Windows 用 ctypes 调 `SHFileOperationW`(FOF_ALLOWUNDO) 送进回收站；纯标准库。🟢 项的 `trash_paths` 应在用户配置文件（`%USERPROFILE%`）目录内，便于白名单与 HOME 越界校验通过。
+Windows 使用 `SHFileOperationW` 和 `FOF_ALLOWUNDO` 移入回收站，同时检查错误码和用户中止状态。失败时停止，不回退到永久删除。API 返回成功后仍要确认原路径已经不存在，并记录操作前后的磁盘可用空间；移入回收站本身通常不会释放内容占用。

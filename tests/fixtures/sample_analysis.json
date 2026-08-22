@@ -1,0 +1,159 @@
+{
+  "schema_version": "1.0",
+  "source_scan_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "analysis_origin": "visual-fixture",
+  "generated_at": "2026-08-22 10:30:00",
+  "scan_seconds": 12.4,
+  "system": {
+    "os": "macOS 15.6",
+    "build": "24G84",
+    "arch": "Apple Silicon (arm64)",
+    "user": "example",
+    "home": "/Users/example",
+    "filesystem": "APFS",
+    "purgeable": "8.2 GB",
+    "disk_name": "Macintosh HD",
+    "disk_total": "494.4 GB",
+    "disk_used": "318.7 GB",
+    "disk_free": "175.7 GB",
+    "disks": [
+      {
+        "name": "Macintosh HD",
+        "total": "494.4 GB",
+        "used": "318.7 GB",
+        "free": "175.7 GB"
+      }
+    ]
+  },
+  "coverage": {
+    "requested_roots": 16,
+    "completed_roots": 15,
+    "skipped_roots": 1,
+    "scheduled_paths": 84,
+    "reported_items": 12
+  },
+  "top5": [
+    {
+      "rank": 1,
+      "tier": "yellow",
+      "size": "约 31.2 GB",
+      "type": "应用数据",
+      "name": "视频离线内容",
+      "path": "/Users/example/Library/Containers/com.example.video",
+      "note": "需要人工或正规系统入口处理"
+    },
+    {
+      "rank": 2,
+      "tier": "red",
+      "size": "约 18.5 GB",
+      "type": "应用本体",
+      "name": "Example Studio.app",
+      "path": "/Applications/Example Studio.app",
+      "note": "需要人工或正规系统入口处理"
+    },
+    {
+      "rank": 3,
+      "tier": "green",
+      "size": "约 12.8 GB",
+      "type": "开发或应用缓存",
+      "name": "Xcode DerivedData",
+      "path": "/Users/example/Library/Developer/Xcode/DerivedData/Demo",
+      "note": "确定性规则已授权"
+    },
+    {
+      "rank": 4,
+      "tier": "green",
+      "size": "约 6.4 GB",
+      "type": "开发或应用缓存",
+      "name": "应用缓存",
+      "path": "/Users/example/Library/Caches/com.example.app",
+      "note": "确定性规则已授权"
+    },
+    {
+      "rank": 5,
+      "tier": "yellow",
+      "size": "约 4.1 GB",
+      "type": "下载内容",
+      "name": "安装包归档",
+      "path": "/Users/example/Downloads/installers",
+      "note": "需要人工或正规系统入口处理"
+    }
+  ],
+  "green": [
+    {
+      "name": "Xcode DerivedData",
+      "path": "/Users/example/Library/Developer/Xcode/DerivedData/Demo",
+      "size_estimate": "约 12.8 GB",
+      "kill_processes": ["Xcode"],
+      "trash_paths": ["/Users/example/Library/Developer/Xcode/DerivedData/Demo"],
+      "commands": [],
+      "rule_id": "macos.xcode-derived-data-entry",
+      "rule_reason": "Xcode 会在下一次构建时重新生成派生数据。",
+      "rule_risk": "下一次索引和构建耗时会增加。",
+      "rule_non_targets": ["Xcode Archives", "项目源代码", "DerivedData 根目录本身"]
+    },
+    {
+      "name": "应用缓存",
+      "path": "/Users/example/Library/Caches/com.example.app",
+      "size_estimate": "约 6.4 GB",
+      "kill_processes": [],
+      "trash_paths": ["/Users/example/Library/Caches/com.example.app"],
+      "commands": [],
+      "rule_id": "macos.library-cache-entry",
+      "rule_reason": "对应应用会在下次启动或使用时重建缓存。",
+      "rule_risk": "应用首次启动可能变慢，离线内容可能需要重新下载。",
+      "rule_non_targets": ["~/Library/Caches 根目录本身", "~/Library/Application Support", "容器数据和钥匙串"]
+    }
+  ],
+  "yellow": [
+    {
+      "name": "视频离线内容",
+      "path": "/Users/example/Library/Containers/com.example.video",
+      "size": "约 31.2 GB",
+      "content_profile": "应用管理的离线视频、索引和播放状态。",
+      "why_manual": "目录同时包含可再下载内容和用户状态，无法按整个目录授权。",
+      "disposal": "优先在视频应用的下载管理中删除已观看内容。",
+      "risk": "直接移动容器目录可能导致应用配置和登录状态丢失。"
+    },
+    {
+      "name": "安装包归档",
+      "path": "/Users/example/Downloads/installers",
+      "size": "约 4.1 GB",
+      "content_profile": "下载的安装镜像和压缩包。",
+      "why_manual": "可能包含唯一副本或仍需使用的软件版本。",
+      "disposal": "确认软件已经安装且无需保留旧版本后再手动处理。",
+      "risk": "删除后可能需要重新下载。"
+    }
+  ],
+  "red": [
+    {
+      "name": "Example Studio.app",
+      "path": "/Applications/Example Studio.app",
+      "size": "约 18.5 GB",
+      "why_keep": "这是应用本体，不应由存储报告直接处置。",
+      "indirect_release": "使用应用自带卸载器或在访达中按官方流程卸载。",
+      "auto_reclaim": "本 Skill 不自动删除应用本体。",
+      "app_paths": ["/Applications/Example Studio.app"]
+    }
+  ],
+  "denied": [
+    "/Users/example/Library/Mail"
+  ],
+  "summary": {
+    "overview": "本次扫描识别出 19.2 GB 可恢复处理的缓存；更大的空间集中在应用托管内容和应用本体。",
+    "tier_stats": {
+      "green": "约 19.2 GB",
+      "yellow": "约 35.3 GB",
+      "red": "约 18.5 GB"
+    },
+    "priority": [
+      "先复核绿灯规则，再将缓存移到废纸篓。",
+      "视频离线内容优先在应用内管理。",
+      "应用本体只通过正规卸载入口处理。"
+    ],
+    "long_term": [
+      "每月复扫一次开发缓存和离线内容。",
+      "重要下载和媒体内容先建立独立备份。"
+    ]
+  }
+}

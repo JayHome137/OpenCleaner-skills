@@ -1,43 +1,99 @@
-# Storage Analyzer Skill
+# Storage Analyzer
 
-`storage-analyzer` 是一个面向 AI Agent 的只读存储分析 Skill。它读取磁盘占用，按风险把大目录分成三类：可自动清理、需人工判断、谨慎清理，再生成可交互的 HTML 报告。
+Storage Analyzer 是一个面向 Codex 和其他 Agent 的 macOS/Windows 存储分析 Skill。它把只读扫描、确定性安全规则、Agent 语义解释和中文 HTML 报告组合在一起；文件处置默认只允许移到废纸篓。
 
-它的工作原理很简单：先只读扫描，再由 agent 结合系统路径和目录结构判断“这是什么、能不能动、该怎么处理”。脚本只负责采集和渲染，不替 agent 做删除决策。
+## 当前能力
 
-## 能做什么
+- 使用互斥扫描根和有限并发统计磁盘热点。
+- 输出版本化 `scan-result`，保留覆盖率、超时和权限错误。
+- 使用本项目规则生成可复现的绿黄红三级分析草稿。
+- 允许 Agent 解释 UUID 容器、离线内容、应用数据、开发缓存和系统数据。
+- 延续现版本的磁盘总览、Top 5、执行建议、三级卡片和长期建议体验，展示层已独立重写。
+- 使用显式 Dry Run、独立 session plan、路径/文件身份复核和 JSONL 操作历史。
+- 支持静态只读报告，或在本地服务中打开目录、移到废纸篓。
+- Trash 后复核原路径、记录磁盘可用空间变化，并在报告中展示本次操作历史。
 
-- 扫描 macOS 和 Windows 的常见大头目录
-- 把结果分成绿灯、黄灯、红灯三类
-- 生成静态报告，或者起本地服务提供受控删除按钮
+不提供永久删除、系统目录自动清理、管理员权限操作、完整应用卸载、系统优化或实时硬件监控。
+
+## 使用
+
+在 Codex 中调用：
+
+```text
+使用 $storage-analyzer 分析电脑存储空间并生成分级报告。
+```
+
+手动执行完整链路：
+
+```bash
+cd storage-analyzer
+python3 scripts/scan.py > /tmp/storage-scan.json
+python3 scripts/classify.py /tmp/storage-scan.json /tmp/storage-analysis.json
+python3 scripts/validate_plan.py /tmp/storage-analysis.json > /tmp/storage-dry-run.json
+python3 scripts/server.py /tmp/storage-analysis.json
+```
+
+静态报告：
+
+```bash
+python3 scripts/build_report.py /tmp/storage-analysis.json ~/Desktop/storage-report.html
+```
+
+## 运行结构
+
+```text
+scan.py
+  -> scan-result 1.0
+  -> classify.py + rules/*.json
+  -> analysis 1.0
+  -> Agent 只补充解释
+  -> validate_plan.py -> 不可执行 Dry Run
+  -> server.py -> 独立 session action-plan 1.0
+  -> build_report.py 或受控本地服务
+  -> file_ops.py + operations.jsonl
+```
+
+三个数据契约位于 `storage-analyzer/schemas/`。安全规则位于 `storage-analyzer/rules/`，规则和代码分开审阅。
+
+## 安全模型
+
+- Agent 生成或修改的路径不能直接获得文件操作权限。
+- Dry Run 计划在服务端和文件操作内核两层都不可执行。
+- 浏览器提交 action ID，不提交路径或 mode。
+- 批量操作会在第一个副作用前验证全部目标。
+- 执行时重新检查真实路径、文件身份、符号链接、保护目录和规则。
+- 操作计划 30 分钟后失效，已完成的 Trash 动作不能重放。
+- Trash 失败即停止，不回退到永久删除。
+- Trash 返回成功后仍会复核原路径；原路径未移走则记为失败。
+- 操作日志记录 started/最终结果、规则、目标、失败原因和磁盘可用空间实测变化。
+- 静态报告通过安全 JSON 嵌入防止 analysis 内容提前闭合脚本标签。
 
 ## 平台状态
 
 | 平台 | 状态 | 说明 |
 | --- | --- | --- |
-| macOS | 完整实现并实测 | 支持扫描、报告、交互式服务和受控删除。 |
-| Windows | 已通过基础验证 | 已通过 GitHub Actions Windows runner 验证扫描、报告和回收站逻辑；真实桌面场景仍建议再跑一轮。 |
-| Linux | 不作为目标平台 | 代码和参考资料主要覆盖 macOS / Windows。 |
+| macOS | 本地已验证 | 规则、路径策略、报告、安全单元测试和临时 fixture Trash smoke 均已通过。 |
+| Windows | Runner 待验证 | 扫描、分类、计划、报告和 Recycle Bin smoke 已实现；需在真实 Windows runner 上执行。 |
+| Linux | 不支持 | 扫描和文件操作明确拒绝。 |
 
-## 怎么用
+## 验证
 
-在 Codex 里直接调用：
-
-```text
-使用 $storage-analyzer 帮我扫描电脑存储空间，并生成分级清理报告。
+```bash
+python3 scripts/validate_package.py
+python3 -m unittest discover -s tests -p 'test_*.py' -v
+python3 scripts/benchmark_scan.py
 ```
 
-其他 Agent 也可以直接读取 `storage-analyzer/SKILL.md`，然后运行 `storage-analyzer/scripts/scan.py`、`build_report.py` 或 `server.py`。
+GitHub Actions 已配置 macOS 和 Windows 验证；当前本地结果与尚待执行的远程证据见 [docs/ACCEPTANCE_MATRIX.md](docs/ACCEPTANCE_MATRIX.md)。项目目标与分阶段验收标准见 [PROJECT_GOALS.md](PROJECT_GOALS.md)。
 
-## 为什么这样设计
+用于端到端和视觉回归的无敏感信息样本位于 `tests/fixtures/sample_analysis.json`；它只生成静态报告，不执行文件操作。
 
-这个项目不追求“自动删得最快”，而是追求“判断和边界清楚”。绿灯只放可再生缓存，黄灯保留给有用户数据的目录，红灯只覆盖适合正规卸载的应用本体。这样能减少误删，也方便用户自己决定要不要动。
+## 来源与许可
 
-## 来源与修改说明
+本仓库最初参考 `KKKKhazix/khazix-skills` 的 `storage-analyzer` Skill。当前运行时、契约、规则、安全策略、测试和报告模板均已独立重写；发行内容不依赖原参考仓库或 Mole 的源码与运行组件。
 
-本项目基于 [KKKKhazix/khazix-skills](https://github.com/KKKKhazix/khazix-skills) 仓库中的同名 `storage-analyzer` 技能修改而来。原仓库由 KKKKhazix 维护，并采用 MIT License。
+第三方来源和完整 MIT notice 见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)，逐文件处置见 [docs/PROVENANCE.md](docs/PROVENANCE.md)。
 
-当前仓库在原技能基础上做了适配和整理，包括面向 Codex 的 Skill 打包结构、中文 README、平台适用说明、GitHub 发布结构、`agents/openai.yaml` 元数据，以及本仓库维护所需的验证脚本。
+从版本 1.0.0 起，本项目版权所有者拥有的当前实现采用 [PolyForm Noncommercial License 1.0.0](LICENSE)：非商业用途可以按该许可证使用、修改和分发；商业用途必须事先取得 JayHome137 的单独书面商业许可，联系 `GitHub repository maintainers`。具体入口见 [COMMERCIAL_LICENSE.md](COMMERCIAL_LICENSE.md)，必须随发行物保留的项目声明见 [NOTICE](NOTICE)。
 
-## 许可证
-
-本项目使用 MIT License，详见 [LICENSE](LICENSE)。
+仓库历史中已经按 MIT 发布的版本继续保有原授权，第三方 MIT 内容也继续按其原条款处理；新许可证不追溯撤销或覆盖这些权利。实施记录和边界见 [docs/LICENSING_PLAN.md](docs/LICENSING_PLAN.md)。

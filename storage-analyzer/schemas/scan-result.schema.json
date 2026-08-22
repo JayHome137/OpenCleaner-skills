@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://storage-analyzer.local/schemas/scan-result.schema.json",
+  "title": "Storage Analyzer scan result",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_at",
+    "scan_seconds",
+    "system",
+    "groups",
+    "coverage",
+    "errors"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "generated_at": {"type": "string", "minLength": 1},
+    "scan_seconds": {"type": "number", "minimum": 0},
+    "system": {
+      "type": "object",
+      "required": ["os", "home", "disk_total", "disk_used", "disk_free", "disks"],
+      "additionalProperties": true
+    },
+    "groups": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["name", "path", "size_kb", "size_h"],
+          "properties": {
+            "name": {"type": "string"},
+            "path": {"type": "string", "minLength": 1},
+            "size_kb": {"type": "integer", "minimum": 0},
+            "size_h": {"type": "string"}
+          },
+          "additionalProperties": true
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "required": ["requested_roots", "completed_roots", "skipped_roots"],
+      "properties": {
+        "requested_roots": {"type": "integer", "minimum": 0},
+        "completed_roots": {"type": "integer", "minimum": 0},
+        "skipped_roots": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": true
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "path", "message"],
+        "properties": {
+          "code": {"type": "string"},
+          "path": {"type": "string"},
+          "message": {"type": "string"},
+          "phase": {"type": "string"}
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://storage-analyzer.local/schemas/action-plan.schema.json",
+  "title": "Storage Analyzer action plan",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "purpose",
+    "dry_run",
+    "plan_id",
+    "generated_at",
+    "expires_at",
+    "platform",
+    "home",
+    "source_analysis_sha256",
+    "actions",
+    "rejected"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "purpose": {"enum": ["dry-run", "session"]},
+    "dry_run": {"type": "boolean"},
+    "plan_id": {"type": "string", "minLength": 16},
+    "generated_at": {"type": "string"},
+    "expires_at": {"type": "string"},
+    "platform": {"enum": ["darwin", "win32"]},
+    "home": {"type": "string"},
+    "source_analysis_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "action_id",
+          "mode",
+          "path",
+          "canonical_path",
+          "tier",
+          "rule_id",
+          "recovery",
+          "risk",
+          "non_targets",
+          "identity",
+          "parent_identity"
+        ],
+        "properties": {
+          "action_id": {"type": "string", "minLength": 16},
+          "mode": {"enum": ["open", "trash"]},
+          "path": {"type": "string"},
+          "canonical_path": {"type": "string"},
+          "tier": {"enum": ["green", "yellow", "red"]},
+          "rule_id": {"type": "string"},
+          "recovery": {"type": "string"},
+          "risk": {"type": "string"},
+          "non_targets": {"type": "array", "items": {"type": "string"}},
+          "identity": {
+            "type": "object",
+            "required": ["device", "inode", "mode", "kind", "size", "mtime_ns"],
+            "properties": {
+              "device": {"type": "integer"},
+              "inode": {"type": "integer"},
+              "mode": {"type": "integer"},
+              "kind": {"enum": ["file", "directory"]},
+              "size": {"type": "integer", "minimum": 0},
+              "mtime_ns": {"type": "integer"}
+            },
+            "additionalProperties": false
+          },
+          "parent_identity": {
+            "type": "object",
+            "required": ["device", "inode", "mode", "kind", "size", "mtime_ns"],
+            "properties": {
+              "device": {"type": "integer", "minimum": 0},
+              "inode": {"type": "integer", "minimum": 0},
+              "mode": {"type": "integer", "minimum": 0},
+              "kind": {"const": "directory"},
+              "size": {"type": "integer", "minimum": 0},
+              "mtime_ns": {"type": "integer"}
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "rejected": {"type": "array"}
+  },
+  "additionalProperties": false
+}

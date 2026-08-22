@@ -1,65 +1,64 @@
 #!/usr/bin/env python3
-"""Inject an analysis JSON into the HTML template -> a standalone report.
+"""Validate an analysis JSON and build a standalone read-only HTML report.
 
 Usage:
     build_report.py <analysis.json> [output.html]
-
-The analysis JSON is produced by Claude after interpreting scan.py output.
-Schema (all sections optional except system):
-
-{
-  "generated_at": "2026-05-28 12:00:00",
-  "scan_seconds": 42.1,
-  "system": {os, build, arch, user, home, filesystem,
-             disk_total, disk_used, disk_free, purgeable},
-  "top5": [{rank, tier(green|yellow|red), size, type, name, path, note}],
-  "green":  [{name, path, size_estimate, kill_processes:[], trash_paths:[...], commands:[{label,cmd}]}],
-  "yellow": [{name, path, size, content_profile, why_manual, disposal, risk, trash_paths:[...]?, open_note?}],
-  "red":    [{name, path, size, why_keep, indirect_release, auto_reclaim, app_paths:[...]?}],
-  "denied": ["/path/one", ...],
-  "summary": {overview, tier_stats:{green,yellow,red}, priority:[...], long_term:[...]}
-}
 """
-import json
+from __future__ import annotations
+
 import os
 import sys
+from pathlib import Path
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-TEMPLATE = os.path.join(HERE, "..", "assets", "report_template.html")
+HERE = Path(__file__).resolve().parent
+TEMPLATE = HERE.parent / "assets" / "report_template.html"
+
+if str(HERE) not in sys.path:
+    sys.path.insert(0, str(HERE))
+
+from contracts import ContractError, json_for_script, load_json_object, validate_analysis  # noqa: E402
 
 
-def configure_text_output():
-    """Prefer UTF-8 console output on Windows runners and terminals."""
+def configure_text_output() -> None:
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", errors="replace")
 
 
-def main():
+def render_report(analysis: dict, template: str, interactive_config: object = None) -> str:
+    validate_analysis(analysis)
+    if "__REPORT_DATA__" not in template or "__DELETE_CONFIG__" not in template:
+        raise ContractError("报告模板缺少数据占位符")
+    return template.replace("__REPORT_DATA__", json_for_script(analysis)).replace(
+        "__DELETE_CONFIG__", json_for_script(interactive_config)
+    )
+
+
+def build_report(source: str, output: str) -> Path:
+    analysis = load_json_object(source)
+    template = TEMPLATE.read_text(encoding="utf-8")
+    rendered = render_report(analysis, template)
+    destination = Path(output).expanduser()
+    destination.write_text(rendered, encoding="utf-8")
+    return destination
+
+
+def main() -> None:
     configure_text_output()
-    if len(sys.argv) < 2:
+    if len(sys.argv) not in (2, 3):
         print(__doc__)
-        sys.exit(1)
-    src = sys.argv[1]
-    out = sys.argv[2] if len(sys.argv) > 2 else os.path.expanduser(
-        "~/Desktop/storage-report.html")
-
-    with open(src, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    with open(TEMPLATE, "r", encoding="utf-8") as f:
-        tpl = f.read()
-
-    blob = json.dumps(data, ensure_ascii=False)
-    # 静态报告不带删除能力（DELETE=null），删除按钮只在 server.py 服务时出现
-    html = tpl.replace("__REPORT_DATA__", blob).replace("__DELETE_CONFIG__", "null")
-
-    with open(out, "w", encoding="utf-8") as f:
-        f.write(html)
-    print(f"报告已生成: {out}")
+        raise SystemExit(2)
+    output = sys.argv[2] if len(sys.argv) == 3 else os.path.expanduser("~/Desktop/storage-report.html")
+    try:
+        destination = build_report(sys.argv[1], output)
+    except (ContractError, OSError) as exc:
+        print(f"报告生成失败：{exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+    print(f"报告已生成：{destination}")
     if sys.platform.startswith("win"):
-        print(f'打开: start "" "{out}"')
+        print(f'打开：start "" "{destination}"')
     else:
-        print(f"打开: open '{out}'")
+        print(f"打开：open '{destination}'")
 
 
 if __name__ == "__main__":
