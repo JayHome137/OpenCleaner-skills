@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPTS = ROOT / "storage-analyzer" / "scripts"
+SCRIPTS = ROOT / "opencleaner-skills" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 from scan import ScanEngine, ScanTarget

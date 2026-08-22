@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Load and match Storage Analyzer's independently defined cleanup rules."""
+"""Load and match OpenCleaner-skills's independently defined cleanup rules."""
 from __future__ import annotations
 
 import json

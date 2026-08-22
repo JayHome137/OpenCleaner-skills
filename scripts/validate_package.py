@@ -10,7 +10,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILL_DIR = ROOT / "storage-analyzer"
+SKILL_DIR = ROOT / "opencleaner-skills"
 SCRIPTS_DIR = SKILL_DIR / "scripts"
 
 REQUIRED_FILES = [
@@ -71,9 +71,9 @@ def check_required_files() -> None:
 def check_skill_frontmatter() -> None:
     text = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
     if not text.startswith("---\n"):
-        fail("storage-analyzer/SKILL.md must start with YAML frontmatter")
+        fail("opencleaner-skills/SKILL.md must start with YAML frontmatter")
     frontmatter = text.split("---", 2)[1]
-    for snippet in ("name: storage-analyzer", "description:"):
+    for snippet in ("name: opencleaner-skills", "description:"):
         if snippet not in frontmatter:
             fail(f"SKILL.md frontmatter missing: {snippet}")
 
@@ -81,8 +81,8 @@ def check_skill_frontmatter() -> None:
 def check_openai_yaml() -> None:
     text = (SKILL_DIR / "agents" / "openai.yaml").read_text(encoding="utf-8")
     for snippet in (
-        'display_name: "存储分析助手"',
-        'default_prompt: "使用 $storage-analyzer',
+        'display_name: "OpenCleaner-skills"',
+        'default_prompt: "使用 $opencleaner-skills',
         "allow_implicit_invocation: true",
     ):
         if snippet not in text:
@@ -104,7 +104,7 @@ def check_licensing() -> None:
     notice = (ROOT / "NOTICE").read_text(encoding="utf-8")
     for snippet in (
         "Required Notice: Copyright (c) 2026 JayHome137.",
-        "Storage Analyzer version 1.0.0",
+        "OpenCleaner-skills version 1.0.0",
         "GitHub repository maintainers",
     ):
         if snippet not in notice:
@@ -229,7 +229,7 @@ def main() -> None:
     check_json_files()
     check_no_permanent_delete_surface()
     check_runtime_imports_and_static_report()
-    print("storage-analyzer package validation passed")
+    print("opencleaner-skills package validation passed")
 
 
 if __name__ == "__main__":

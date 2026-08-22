@@ -35,13 +35,13 @@ def path_is_within(path: str, root: str) -> bool:
 
 
 def default_state_dir() -> Path:
-    override = os.environ.get("STORAGE_ANALYZER_STATE_DIR")
+    override = os.environ.get("OPENCLEANER_SKILLS_STATE_DIR")
     if override:
         return Path(override).expanduser()
     if sys.platform.startswith("win"):
         root = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
-        return Path(root) / "StorageAnalyzer"
-    return Path(os.path.expanduser("~")) / ".local" / "state" / "storage-analyzer"
+        return Path(root) / "OpenCleanerSkills"
+    return Path(os.path.expanduser("~")) / ".local" / "state" / "opencleaner-skills"
 
 
 class OperationLog:

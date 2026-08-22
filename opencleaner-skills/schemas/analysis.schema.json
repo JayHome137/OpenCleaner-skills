@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://storage-analyzer.local/schemas/analysis.schema.json",
-  "title": "Storage Analyzer analysis",
+  "$id": "https://opencleaner-skills.local/schemas/analysis.schema.json",
+  "title": "OpenCleaner-skills analysis",
   "type": "object",
   "required": [
     "schema_version",

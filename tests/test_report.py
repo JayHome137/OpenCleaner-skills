@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPTS = ROOT / "storage-analyzer" / "scripts"
+SCRIPTS = ROOT / "opencleaner-skills" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 from build_report import render_report
@@ -25,7 +25,7 @@ class ReportTests(unittest.TestCase):
     def test_real_template_keeps_reading_order_and_contains_no_legacy_request(self) -> None:
         analysis = analysis_for(Path("/tmp/home"))
         analysis["summary"]["overview"] = "</script><script>alert(1)</script>"
-        template = (ROOT / "storage-analyzer" / "assets" / "report_template.html").read_text(
+        template = (ROOT / "opencleaner-skills" / "assets" / "report_template.html").read_text(
             encoding="utf-8"
         )
         rendered = render_report(analysis, template)
@@ -49,7 +49,7 @@ class ReportTests(unittest.TestCase):
         self.assertEqual(positions, sorted(positions))
 
     def test_mobile_system_metadata_can_shrink_inside_the_overview(self) -> None:
-        template = (ROOT / "storage-analyzer" / "assets" / "report_template.html").read_text(
+        template = (ROOT / "opencleaner-skills" / "assets" / "report_template.html").read_text(
             encoding="utf-8"
         )
         self.assertIn(

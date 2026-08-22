@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPTS = ROOT / "storage-analyzer" / "scripts"
+SCRIPTS = ROOT / "opencleaner-skills" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 from build_report import render_report
@@ -58,7 +58,7 @@ class EndToEndTests(unittest.TestCase):
                 platform="darwin",
                 environment=environment,
             )
-            template = (ROOT / "storage-analyzer" / "assets" / "report_template.html").read_text(
+            template = (ROOT / "opencleaner-skills" / "assets" / "report_template.html").read_text(
                 encoding="utf-8"
             )
             report = render_report(analysis, template)

@@ -2,7 +2,7 @@
 
 ## License boundary
 
-Storage Analyzer version 1.0.0 uses the PolyForm Noncommercial License 1.0.0 for the current implementation to the extent that JayHome137 owns the relevant rights. The third-party material and historical upstream content identified below remain governed by their original licenses. The PolyForm license does not replace, restrict, or relicense those third-party grants, and previously distributed MIT versions retain their existing permissions.
+OpenCleaner-skills version 1.0.0 uses the PolyForm Noncommercial License 1.0.0 for the current implementation to the extent that JayHome137 owns the relevant rights. The third-party material and historical upstream content identified below remain governed by their original licenses. The PolyForm license does not replace, restrict, or relicense those third-party grants, and previously distributed MIT versions retain their existing permissions.
 
 ## Khazix Skills storage-analyzer
 

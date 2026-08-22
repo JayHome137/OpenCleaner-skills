@@ -1,6 +1,6 @@
-# Storage Analyzer
+# OpenCleaner-skills
 
-Storage Analyzer 是一个面向 Codex 和其他 Agent 的 macOS/Windows 存储分析 Skill。它把只读扫描、确定性安全规则、Agent 语义解释和中文 HTML 报告组合在一起；文件处置默认只允许移到废纸篓。
+OpenCleaner-skills 是一个面向 Codex 和其他 Agent 的 macOS/Windows 存储分析 Skill。它把只读扫描、确定性安全规则、Agent 语义解释和中文 HTML 报告组合在一起；文件处置默认只允许移到废纸篓。
 
 ## 当前能力
 
@@ -20,13 +20,13 @@ Storage Analyzer 是一个面向 Codex 和其他 Agent 的 macOS/Windows 存储�
 在 Codex 中调用：
 
 ```text
-使用 $storage-analyzer 分析电脑存储空间并生成分级报告。
+使用 $opencleaner-skills 分析电脑存储空间并生成分级报告。
 ```
 
 手动执行完整链路：
 
 ```bash
-cd storage-analyzer
+cd opencleaner-skills
 python3 scripts/scan.py > /tmp/storage-scan.json
 python3 scripts/classify.py /tmp/storage-scan.json /tmp/storage-analysis.json
 python3 scripts/validate_plan.py /tmp/storage-analysis.json > /tmp/storage-dry-run.json
@@ -53,7 +53,7 @@ scan.py
   -> file_ops.py + operations.jsonl
 ```
 
-三个数据契约位于 `storage-analyzer/schemas/`。安全规则位于 `storage-analyzer/rules/`，规则和代码分开审阅。
+三个数据契约位于 `opencleaner-skills/schemas/`。安全规则位于 `opencleaner-skills/rules/`，规则和代码分开审阅。
 
 ## 安全模型
 

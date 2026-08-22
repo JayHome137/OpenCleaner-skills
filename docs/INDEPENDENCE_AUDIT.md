@@ -10,20 +10,20 @@
 
 - 初始引入提交：`de82aa35461d533c61aa7099c774a612199c0311`。
 - 审计范围：Skill 指令、扫描器、报告生成器、服务端、HTML 模板和两份平台参考。
-- Mole 检查范围：`storage-analyzer/`、`scripts/`、`tests/`、`.github/`。
+- Mole 检查范围：`opencleaner-skills/`、`scripts/`、`tests/`、`.github/`。
 - 方法：Git 行级差异、旧/新完全相同行交集、运行目录标识搜索、当前模块依赖检查。
 
 ## 行级结果
 
 | 文件 | 初始行数 | 当前行数 | Git 删除旧行 | 相同行性质 |
 | --- | ---: | ---: | ---: | --- |
-| `storage-analyzer/SKILL.md` | 117 | 138 | 71 | frontmatter 标记、代码围栏、项目名称和通用标题。 |
-| `storage-analyzer/scripts/scan.py` | 320 | 428 | 287 | Python imports、`try`/`continue`、标准 main 入口和通用单位列表。 |
-| `storage-analyzer/scripts/build_report.py` | 55 | 65 | 40 | shebang、Usage 入口、标准 main 入口和 `os`/`sys` imports。 |
-| `storage-analyzer/scripts/server.py` | 250 | 273 | 221 | 标准库 imports、Usage 入口、KeyboardInterrupt 和 main 入口。 |
-| `storage-analyzer/assets/report_template.html` | 497 | 521 | 439 | HTML 标签、脚本/样式闭合标签、报告标题。 |
-| `storage-analyzer/references/macos.md` | 62 | 40 | 50 | 无完全相同的非空行。 |
-| `storage-analyzer/references/windows.md` | 33 | 37 | 24 | 仅“多盘符”通用标题。 |
+| `opencleaner-skills/SKILL.md` | 117 | 138 | 71 | frontmatter 标记、代码围栏、项目名称和通用标题。 |
+| `opencleaner-skills/scripts/scan.py` | 320 | 428 | 287 | Python imports、`try`/`continue`、标准 main 入口和通用单位列表。 |
+| `opencleaner-skills/scripts/build_report.py` | 55 | 65 | 40 | shebang、Usage 入口、标准 main 入口和 `os`/`sys` imports。 |
+| `opencleaner-skills/scripts/server.py` | 250 | 273 | 221 | 标准库 imports、Usage 入口、KeyboardInterrupt 和 main 入口。 |
+| `opencleaner-skills/assets/report_template.html` | 497 | 521 | 439 | HTML 标签、脚本/样式闭合标签、报告标题。 |
+| `opencleaner-skills/references/macos.md` | 62 | 40 | 50 | 无完全相同的非空行。 |
+| `opencleaner-skills/references/windows.md` | 33 | 37 | 24 | 仅“多盘符”通用标题。 |
 
 相同的通用语法行不构成项目主体实现。重要行为已经迁移到本项目独立的数据契约、规则目录、策略内核和 action-ID 协议。
 
