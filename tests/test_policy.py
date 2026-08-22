@@ -78,6 +78,7 @@ class PolicyTests(unittest.TestCase):
             self.policy.authorize(str(self.home), "trash", "green")
         self.assertEqual(raised.exception.code, "protected_root")
 
+    @unittest.skipUnless(sys.platform == "darwin", "macOS root semantics require a macOS host")
     def test_macos_system_roots_are_never_authorized(self) -> None:
         for path in ("/", "/Applications", "/Library", "/System"):
             with self.subTest(path=path):
