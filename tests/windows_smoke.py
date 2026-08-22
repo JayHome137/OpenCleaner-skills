@@ -108,7 +108,11 @@ def main() -> None:
         html = report_path.read_text(encoding="utf-8")
         assert "存储分析报告" in html
         assert "__REPORT_DATA__" not in html
-        assert "直接删除" not in html
+        assert "const SESSION = null;" in html
+        assert "本报告不生成永久删除命令" in html
+        assert 'data-mode="rm"' not in html
+        assert "data-paths" not in html
+        assert "authorizedPaths" not in html
 
         trash_action = next(
             action
