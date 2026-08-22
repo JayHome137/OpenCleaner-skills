@@ -249,4 +249,4 @@ tests/
 
 ## 下一步
 
-1.0.0 技术、许可和双平台验收均已完成。实现提交 `ddfc6c4e695579b431a022a43343fdb8427ad6f5` 的 [macOS workflow](https://github.com/JayHome137/OpenCleaner-skills/actions/runs/32548944726) 与 [Windows workflow](https://github.com/JayHome137/OpenCleaner-skills/actions/runs/32548944701) 均成功；后续商业合同仍需按适用司法辖区进行专业法律审阅。
+1.0.0 技术、许可和双平台验收均已完成。名称同步提交 `9cf09d79533c10ba65a729120bc52bac753263d4` 的 [macOS workflow](https://github.com/JayHome137/OpenCleaner-skills/actions/runs/32550508546) 与 [Windows workflow](https://github.com/JayHome137/OpenCleaner-skills/actions/runs/32550508708) 均成功；后续商业合同仍需按适用司法辖区进行专业法律审阅。
