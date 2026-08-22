@@ -1,11 +1,11 @@
-# 本地验收矩阵
+# 1.0.0 验收矩阵
 
 > 验证日期：2026-08-22
 > 边界：只操作仓库内测试数据和系统临时目录，不操作用户真实文件；远程 runner 状态以 GitHub Actions 为准。
 
 ## 结论
 
-本地代码、macOS 端到端链路、报告界面、实现独立性和正式许可已通过验收。Windows 原生 Recycle Bin smoke 必须在真实 Windows runner 上执行，在取得远程记录前不记为通过。
+代码、macOS/Windows 端到端链路、报告界面、实现独立性和正式许可均已通过验收。实现提交 `ddfc6c4e695579b431a022a43343fdb8427ad6f5` 已在 GitHub Actions 的真实 macOS 与 Windows runner 上完成验证。
 
 ## 验收结果
 
@@ -16,9 +16,9 @@
 | 单元与安全回归 | 通过 | 53 个测试通过，覆盖规则、符号链接、路径穿越、保护目录、目标或父目录变化、并发重放、Trash 失败、请求边界和移动端网格收缩不变量。 |
 | Dry Run 边界 | 通过 | Dry Run 具有显式 purpose，服务端和文件操作内核均拒绝执行。 |
 | 文件操作边界 | 通过 | 仅允许 `open`、`trash`；没有永久删除回退；副作用前要求日志可写并完整复核整批目标。POSIX 操作日志目录/文件权限为 `0700`/`0600`，并拒绝符号链接日志。 |
-| macOS 端到端 | 通过 | `python3 tests/macos_smoke.py` 输出 `MACOS_SMOKE_OK`；只处理临时 HOME fixture。 |
+| macOS 端到端 | 通过 | 本地 `python3 tests/macos_smoke.py` 和 [macOS run 32548944726](https://github.com/JayHome137/Storage-Analyzer/actions/runs/32548944726) 均输出 `MACOS_SMOKE_OK`；只处理临时 HOME fixture。 |
 | Windows 路径逻辑 | 通过 | 单元测试覆盖 Windows 规则与大小写不敏感路径；工作流和原生 smoke 脚本已配置。 |
-| Windows 原生端到端 | 待远程验证 | `tests/windows_smoke.py` 仅允许 Windows 运行；当前 macOS 主机不能证明 Recycle Bin 实际行为。 |
+| Windows 原生端到端 | 通过 | [Windows run 32548944701](https://github.com/JayHome137/Storage-Analyzer/actions/runs/32548944701) 在 `windows-latest` 完成包校验、53 个单元测试和 Recycle Bin smoke，并输出 `WINDOWS_SMOKE_OK`。 |
 | 扫描确定性 | 通过 | 1 worker 与 4 workers 输出相同 SHA-256：`9d1aa96d6e0173d82ae281fe412aa19bde0b2cc4f8948e5439341c9c8bd01e6d`。 |
 | 报告内容与布局 | 通过 | 保留磁盘总览、Top 5、执行建议、绿黄红卡片、长期建议及颜色语义；桌面和 390x844 移动视口无页面溢出。 |
 | 报告动作协议 | 通过 | 交互报告显示 3 个受控按钮；按钮只有 `data-action-ids`，没有 `data-paths`；操作历史初始隐藏且为空。 |
@@ -45,7 +45,6 @@ python scripts/validate_package.py
 python tests/windows_smoke.py
 ```
 
-## 发布前未完成项
+## 商业化前事项
 
-1. 将本地分支推送到 GitHub，并取得 macOS 与 Windows workflow 的真实成功记录。
-2. 商业化前由适用司法辖区的专业律师审阅对外签署的具体商业合同。
+正式对外签署商业合同时，由适用司法辖区的专业律师审阅具体合同条款。该事项不影响 1.0.0 非商业版本的技术验收。

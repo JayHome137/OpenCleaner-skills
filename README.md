@@ -72,8 +72,8 @@ scan.py
 
 | 平台 | 状态 | 说明 |
 | --- | --- | --- |
-| macOS | 本地已验证 | 规则、路径策略、报告、安全单元测试和临时 fixture Trash smoke 均已通过。 |
-| Windows | Runner 待验证 | 扫描、分类、计划、报告和 Recycle Bin smoke 已实现；需在真实 Windows runner 上执行。 |
+| macOS | 已验证 | 规则、路径策略、报告、安全单元测试和临时 fixture Trash smoke 已在本地及 GitHub runner 通过。 |
+| Windows | 已验证 | 扫描、分类、计划、报告和 Recycle Bin smoke 已在 GitHub `windows-latest` runner 通过。 |
 | Linux | 不支持 | 扫描和文件操作明确拒绝。 |
 
 ## 验证
@@ -84,7 +84,7 @@ python3 -m unittest discover -s tests -p 'test_*.py' -v
 python3 scripts/benchmark_scan.py
 ```
 
-GitHub Actions 已配置 macOS 和 Windows 验证；当前本地结果与尚待执行的远程证据见 [docs/ACCEPTANCE_MATRIX.md](docs/ACCEPTANCE_MATRIX.md)。项目目标与分阶段验收标准见 [PROJECT_GOALS.md](PROJECT_GOALS.md)。
+GitHub Actions 已完成 macOS 和 Windows 验证；本地与远程证据见 [docs/ACCEPTANCE_MATRIX.md](docs/ACCEPTANCE_MATRIX.md)。项目目标与分阶段验收标准见 [PROJECT_GOALS.md](PROJECT_GOALS.md)。
 
 用于端到端和视觉回归的无敏感信息样本位于 `tests/fixtures/sample_analysis.json`；它只生成静态报告，不执行文件操作。
 

@@ -1,6 +1,6 @@
 # Storage Analyzer 重构目标与验收
 
-> 状态：Release Candidate 1.0.0（本地技术与许可验收通过；真实 Windows runner 待完成）
+> 状态：1.0.0 技术与许可验收通过（macOS/Windows 真实 runner 已验证）
 > 用途：记录代码重构、产品边界、安全要求和验收标准。
 
 ## 重要许可说明
@@ -249,4 +249,4 @@ tests/
 
 ## 下一步
 
-本地技术与许可验收已完成。发布前还需要提交并推送当前变更，在真实 macOS/Windows GitHub runner 上取得成功记录；随后将验收矩阵更新为最终状态。
+1.0.0 技术、许可和双平台验收均已完成。实现提交 `ddfc6c4e695579b431a022a43343fdb8427ad6f5` 的 [macOS workflow](https://github.com/JayHome137/Storage-Analyzer/actions/runs/32548944726) 与 [Windows workflow](https://github.com/JayHome137/Storage-Analyzer/actions/runs/32548944701) 均成功；后续商业合同仍需按适用司法辖区进行专业法律审阅。
