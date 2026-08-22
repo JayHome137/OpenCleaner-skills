@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPTS = ROOT / "opencleaner-skills" / "scripts"
+SCRIPTS = ROOT / "open-cleaner" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import build_report
@@ -24,7 +24,7 @@ def main() -> None:
     if sys.platform != "darwin":
         raise SystemExit("macos_smoke.py 只能在 macOS 上运行")
 
-    with tempfile.TemporaryDirectory(prefix="opencleaner-skills-mac-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="open-cleaner-mac-") as temporary:
         base = Path(temporary)
         home = base / "Users" / "alice"
         cache_root = home / "Library" / "Caches"

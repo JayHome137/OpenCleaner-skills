@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://opencleaner-skills.local/schemas/action-plan.schema.json",
-  "title": "OpenCleaner-skills action plan",
+  "$id": "https://open-cleaner.local/schemas/action-plan.schema.json",
+  "title": "OpenCleaner action plan",
   "type": "object",
   "required": [
     "schema_version",

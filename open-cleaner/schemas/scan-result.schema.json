@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://opencleaner-skills.local/schemas/scan-result.schema.json",
-  "title": "OpenCleaner-skills scan result",
+  "$id": "https://open-cleaner.local/schemas/scan-result.schema.json",
+  "title": "OpenCleaner scan result",
   "type": "object",
   "required": [
     "schema_version",

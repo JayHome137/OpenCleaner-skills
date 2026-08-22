@@ -8,7 +8,7 @@ from datetime import timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPTS = ROOT / "opencleaner-skills" / "scripts"
+SCRIPTS = ROOT / "open-cleaner" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 from policy import PolicyError, SafetyPolicy, build_action_plan, ensure_plan_fresh, parse_time

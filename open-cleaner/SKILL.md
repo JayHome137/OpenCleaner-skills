@@ -1,5 +1,5 @@
 ---
-name: opencleaner-skills
+name: open-cleaner
 description: >
   macOS / Windows 存储分析与受控处置 Skill。只读扫描磁盘占用，以确定性规则生成
   绿黄红三级分析草稿，再由 Agent 补充陌生目录说明，保留中文交互式 HTML 报告。
@@ -7,7 +7,7 @@ description: >
   不适用于运行内存/RAM 或进程内存诊断。
 ---
 
-# OpenCleaner-skills
+# OpenCleaner
 
 使用版本化数据契约完成：只读扫描、确定性分级、Agent 解释、操作计划验证、报告展示和可恢复处置。
 

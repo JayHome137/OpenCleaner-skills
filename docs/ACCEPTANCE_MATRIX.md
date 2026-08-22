@@ -11,7 +11,7 @@
 
 | 验收项 | 状态 | 证据与边界 |
 | --- | --- | --- |
-| Skill 形态 | 通过 | 保留 `opencleaner-skills/SKILL.md`、Agent 元数据和标准包结构；未改造成终端套件。 |
+| Skill 形态 | 通过 | 保留 `open-cleaner/SKILL.md`、Agent 元数据和标准包结构；未改造成终端套件。 |
 | 包结构与契约 | 通过 | `python3 scripts/validate_package.py`；scan、analysis、action-plan schema 均受验证。 |
 | 单元与安全回归 | 通过 | 53 个测试通过，覆盖规则、符号链接、路径穿越、保护目录、目标或父目录变化、并发重放、Trash 失败、请求边界和移动端网格收缩不变量。 |
 | Dry Run 边界 | 通过 | Dry Run 具有显式 purpose，服务端和文件操作内核均拒绝执行。 |
@@ -33,7 +33,7 @@
 python3 -m unittest discover -s tests -p 'test_*.py' -v
 python3 scripts/validate_package.py
 python3 scripts/benchmark_scan.py
-python3 -m compileall -q opencleaner-skills/scripts tests scripts
+python3 -m compileall -q open-cleaner/scripts tests scripts
 python3 tests/macos_smoke.py
 git diff --check
 ```

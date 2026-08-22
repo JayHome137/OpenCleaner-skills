@@ -8,17 +8,17 @@
 
 | 路径 | 当前来源 | 重构处置 |
 | --- | --- | --- |
-| `opencleaner-skills/SKILL.md` | 已独立重写 | 保留 Skill 触发形式，运行流程已切换到版本化契约。 |
-| `opencleaner-skills/scripts/scan.py` | 已独立重写 | 使用互斥扫描根、有限并发和结构化错误。 |
-| `opencleaner-skills/scripts/build_report.py` | 已独立重写 | 验证 analysis 并安全嵌入 JSON。 |
-| `opencleaner-skills/scripts/server.py` | 已独立重写 | 只接受短期 action ID，不接受路径和 mode。 |
-| `opencleaner-skills/assets/report_template.html` | 已独立重写 | 延续现版本的阅读顺序和颜色语义；DOM、CSS 和 action-ID 客户端均重新实现。 |
-| `opencleaner-skills/references/*.md` | 已独立重写 | 仅描述当前规则和平台边界。 |
+| `open-cleaner/SKILL.md` | 已独立重写 | 保留 Skill 触发形式，运行流程已切换到版本化契约。 |
+| `open-cleaner/scripts/scan.py` | 已独立重写 | 使用互斥扫描根、有限并发和结构化错误。 |
+| `open-cleaner/scripts/build_report.py` | 已独立重写 | 验证 analysis 并安全嵌入 JSON。 |
+| `open-cleaner/scripts/server.py` | 已独立重写 | 只接受短期 action ID，不接受路径和 mode。 |
+| `open-cleaner/assets/report_template.html` | 已独立重写 | 延续现版本的阅读顺序和颜色语义；DOM、CSS 和 action-ID 客户端均重新实现。 |
+| `open-cleaner/references/*.md` | 已独立重写 | 仅描述当前规则和平台边界。 |
 | `tests/windows_smoke.py` | 已独立重写 | 验证扫描、分类、计划、报告和 Recycle Bin。 |
 | `tests/macos_smoke.py` | 本仓库原创 | 在临时 HOME 验证 macOS 扫描、Dry Run、session plan、报告和 Trash 后复核。 |
 | `scripts/benchmark_scan.py` | 本仓库原创 | 使用临时 fixture 建立稳定输出、去重和耗时基线。 |
 | `scripts/validate_package.py` | 已独立重写 | 验证新包结构、契约和无永久删除不变量。 |
-| `opencleaner-skills/agents/openai.yaml` | 通用 Skill 描述文件，已改写文案 | 只声明当前 Skill 名称、提示语和调用策略。 |
+| `open-cleaner/agents/openai.yaml` | 通用 Skill 描述文件，已改写文案 | 只声明当前 Skill 名称、提示语和调用策略。 |
 | `.gitignore` | 初始仓库保留 | 通用开发忽略项，不属于主体实现。 |
 | `LICENSE` | PolyForm 官方标准文本 | 版本 1.0.0 起约束版权所有者拥有的当前实现；文本 SHA-256 由包校验器锁定。 |
 | `NOTICE`、`COMMERCIAL_LICENSE.md`、`VERSION` | 本仓库原创/项目元数据 | 记录 Required Notice、商业授权入口和 1.0.0 生效版本。 |

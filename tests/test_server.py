@@ -12,7 +12,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPTS = ROOT / "opencleaner-skills" / "scripts"
+SCRIPTS = ROOT / "open-cleaner" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 from file_ops import FileOperator, OperationLog

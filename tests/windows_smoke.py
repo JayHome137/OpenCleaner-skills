@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPTS = ROOT / "opencleaner-skills" / "scripts"
+SCRIPTS = ROOT / "open-cleaner" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import build_report
@@ -30,7 +30,7 @@ def main() -> None:
     if not sys.platform.startswith("win"):
         raise SystemExit("windows_smoke.py 只能在 Windows 上运行")
 
-    with tempfile.TemporaryDirectory(prefix="opencleaner-skills-win-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="open-cleaner-win-") as temporary:
         base = Path(temporary)
         profile = base / "Users" / "alice"
         local = profile / "AppData" / "Local"
@@ -59,7 +59,7 @@ def main() -> None:
                 "USERNAME": "alice",
                 "ProgramFiles": str(program_files),
                 "ProgramFiles(x86)": str(program_files_x86),
-                "OPENCLEANER_SKILLS_STATE_DIR": str(base / "state"),
+                "OPEN_CLEANER_STATE_DIR": str(base / "state"),
             }
         )
         try:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Runtime validation for OpenCleaner-skills's versioned JSON contracts."""
+"""Runtime validation for OpenCleaner's versioned JSON contracts."""
 from __future__ import annotations
 
 import hashlib

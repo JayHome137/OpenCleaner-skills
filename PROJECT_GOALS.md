@@ -1,4 +1,4 @@
-# OpenCleaner-skills 重构目标与验收
+# OpenCleaner 重构目标与验收
 
 > 状态：1.0.0 技术与许可验收通过（macOS/Windows 真实 runner 已验证）
 > 用途：记录代码重构、产品边界、安全要求和验收标准。
@@ -23,7 +23,7 @@
 
 ## 项目目标
 
-把 OpenCleaner-skills 重构为一个独立、跨平台、面向 AI Agent 的存储分析与受控处置 Skill：保留当前版本的中文可视化报告和对陌生目录的语义分析能力，同时建立确定性的扫描、策略、执行和审计内核。
+把 OpenCleaner 重构为一个独立、跨平台、面向 AI Agent 的存储分析与受控处置 Skill：保留当前版本的中文可视化报告和对陌生目录的语义分析能力，同时建立确定性的扫描、策略、执行和审计内核。
 
 项目不以复刻 Mole 或原参考仓库为目标。重构后应拥有独立的模块划分、数据模型、规则体系、安全策略、测试体系和实现代码。
 
@@ -90,7 +90,7 @@ Skill 触发
 建议采用职责导向的独立结构，最终文件名可在实现时按现有仓库风格微调：
 
 ```text
-opencleaner-skills/
+open-cleaner/
 ├── SKILL.md
 ├── assets/
 │   └── report_template.html

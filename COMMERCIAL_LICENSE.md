@@ -1,6 +1,6 @@
 # Commercial Licensing
 
-OpenCleaner-skills version 1.0.0 is available for noncommercial use under the PolyForm Noncommercial License 1.0.0 in the repository root.
+OpenCleaner version 1.0.0 is available for noncommercial use under the PolyForm Noncommercial License 1.0.0 in the repository root.
 
 Commercial use is not granted by the PolyForm Noncommercial License or by this document. A separate written commercial license from the copyright holder is required before any commercial use.
 
