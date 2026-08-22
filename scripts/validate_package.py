@@ -94,11 +94,12 @@ def check_licensing() -> None:
     if version != "1.0.0":
         fail(f"unexpected project version: {version}")
 
-    license_bytes = (ROOT / "LICENSE").read_bytes()
-    license_sha256 = hashlib.sha256(license_bytes).hexdigest()
+    license_text = (ROOT / "LICENSE").read_text(encoding="utf-8")
+    normalized_license = license_text.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
+    license_sha256 = hashlib.sha256(normalized_license).hexdigest()
     expected_sha256 = "ffcca38841adb694b6f380647e15f17c446a4d1656fed51a1e2041d064c94cc8"
     if license_sha256 != expected_sha256:
-        fail("LICENSE must match the official PolyForm Noncommercial 1.0.0 plain text")
+        fail("LICENSE content must match the official PolyForm Noncommercial 1.0.0 plain text")
 
     notice = (ROOT / "NOTICE").read_text(encoding="utf-8")
     for snippet in (
