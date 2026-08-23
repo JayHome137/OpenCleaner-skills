@@ -48,7 +48,7 @@ def measure(root: Path, workers: int) -> dict:
     digests = []
     coverage = None
     for _ in range(RUNS):
-        engine = ScanEngine("win32", max_workers=workers, timeout_seconds=30)
+        engine = ScanEngine("darwin", max_workers=workers, timeout_seconds=30)
         started = time.perf_counter()
         groups, coverage = engine.scan_targets(
             [

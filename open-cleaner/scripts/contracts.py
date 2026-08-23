@@ -10,6 +10,7 @@ from typing import Any, Iterable, Union
 SCAN_SCHEMA_VERSION = "1.0"
 ANALYSIS_SCHEMA_VERSION = "1.0"
 ACTION_PLAN_SCHEMA_VERSION = "1.0"
+MIN_PROJECT_IDLE_SECONDS = 30 * 60
 
 
 class ContractError(ValueError):
@@ -78,6 +79,26 @@ def _require_sha256(value: Any, label: str) -> None:
         int(value, 16)
     except ValueError as exc:
         raise ContractError(f"{label} 必须是十六进制 SHA-256") from exc
+
+
+def _validate_runtime(value: Any, label: str, live_state: bool) -> None:
+    _require_type(value, dict, label)
+    _require_keys(value, ("id", "processes", "owner_tool"), label)
+    _require_type(value["id"], str, f"{label}.id")
+    _require_string_list(value["processes"], f"{label}.processes")
+    if not value["id"] or not value["processes"]:
+        raise ContractError(f"{label} 必须包含所有者和进程模式")
+    tool = value["owner_tool"]
+    _require_type(tool, dict, f"{label}.owner_tool")
+    _require_keys(tool, ("name", "inspect_command", "cleanup_command", "execution"), f"{label}.owner_tool")
+    for key in ("name", "inspect_command", "cleanup_command", "execution"):
+        _require_type(tool[key], str, f"{label}.owner_tool.{key}")
+    if tool["execution"] not in ("review-only", "app-managed"):
+        raise ContractError(f"{label}.owner_tool.execution 无效")
+    if live_state:
+        _require_keys(value, ("state",), label)
+        if value["state"] not in ("active", "inactive", "unknown"):
+            raise ContractError(f"{label}.state 无效")
 
 
 def validate_scan_result(data: dict[str, Any]) -> dict[str, Any]:
@@ -167,6 +188,9 @@ def validate_analysis(data: dict[str, Any]) -> dict[str, Any]:
     _require_keys(data["system"], ("os", "home"), "system")
     for key in ("os", "home"):
         _require_type(data["system"][key], str, f"system.{key}")
+    os_name = data["system"]["os"].lower()
+    if "macos" not in os_name and "mac os" not in os_name:
+        raise ContractError("analysis 当前仅支持 macOS")
     item_specs = {
         "top5": ("rank", "tier", "size", "type", "name", "path", "note"),
         "green": (
@@ -200,8 +224,21 @@ def validate_analysis(data: dict[str, Any]) -> dict[str, Any]:
                     _require_type(item[field], str, f"{label}.{field}")
             if "trash_paths" in item:
                 _require_string_list(item["trash_paths"], f"{label}.trash_paths")
+            if "reviewed_trash_paths" in item:
+                _require_string_list(item["reviewed_trash_paths"], f"{label}.reviewed_trash_paths")
             if "app_paths" in item:
                 _require_string_list(item["app_paths"], f"{label}.app_paths")
+            if "runtime" in item:
+                _validate_runtime(item["runtime"], f"{label}.runtime", live_state=False)
+            if "stage_status" in item:
+                stage = item["stage_status"]
+                _require_type(stage, dict, f"{label}.stage_status")
+                _require_keys(stage, ("state", "code"), f"{label}.stage_status")
+                if stage["state"] not in ("ready", "deferred"):
+                    raise ContractError(f"{label}.stage_status.state 无效")
+                _require_type(stage["code"], str, f"{label}.stage_status.code")
+                if stage["state"] == "ready" and not item.get("reviewed_trash_paths"):
+                    raise ContractError(f"{label} ready 项必须包含 reviewed_trash_paths")
     _require_type(data["summary"], dict, "summary")
     _require_keys(
         data["summary"],
@@ -217,6 +254,22 @@ def validate_analysis(data: dict[str, Any]) -> dict[str, Any]:
         _require_type(data["summary"]["tier_stats"][key], str, f"summary.tier_stats.{key}")
     if "denied" in data:
         _require_string_list(data["denied"], "denied")
+    origin = data.get("analysis_origin")
+    if origin is not None and origin not in ("deterministic-draft", "project-stage"):
+        raise ContractError("analysis_origin 无效")
+    if origin == "project-stage" or "project_stage" in data:
+        if origin != "project-stage" or "project_stage" not in data:
+            raise ContractError("analysis_origin 与 project_stage 不一致")
+        stage = data.get("project_stage")
+        _require_type(stage, dict, "project_stage")
+        _require_keys(stage, ("discovered", "actionable", "actionable_size", "idle_minutes", "min_kb"), "project_stage")
+        for key in ("discovered", "actionable", "idle_minutes", "min_kb"):
+            value = stage[key]
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ContractError(f"project_stage.{key} 必须是非负整数")
+        if stage["actionable"] > stage["discovered"]:
+            raise ContractError("project_stage.actionable 不能超过 discovered")
+        _require_type(stage["actionable_size"], str, "project_stage.actionable_size")
     return data
 
 
@@ -247,8 +300,8 @@ def validate_action_plan(data: dict[str, Any]) -> dict[str, Any]:
     _require_type(data["dry_run"], bool, "action-plan dry_run")
     if data["dry_run"] is not (data["purpose"] == "dry-run"):
         raise ContractError("action-plan dry_run 与 purpose 不一致")
-    if data["platform"] not in ("darwin", "win32"):
-        raise ContractError("action-plan platform 必须是 darwin 或 win32")
+    if data["platform"] != "darwin":
+        raise ContractError("action-plan platform 当前必须是 darwin")
     _require_sha256(data["source_analysis_sha256"], "source_analysis_sha256")
     _require_type(data["actions"], list, "actions")
     _require_type(data["rejected"], list, "rejected")
@@ -272,7 +325,7 @@ def validate_action_plan(data: dict[str, Any]) -> dict[str, Any]:
             ),
             f"actions[{index}]",
         )
-        if action["mode"] not in ("open", "trash"):
+        if action["mode"] not in ("open", "trash", "reviewed_trash"):
             raise ContractError(f"actions[{index}] 含不支持的 mode")
         for key in ("action_id", "path", "canonical_path", "tier", "rule_id", "recovery", "risk"):
             _require_type(action[key], str, f"actions[{index}].{key}")
@@ -281,6 +334,26 @@ def validate_action_plan(data: dict[str, Any]) -> dict[str, Any]:
         action_ids.add(action["action_id"])
         if action["tier"] not in ("green", "yellow", "red"):
             raise ContractError(f"actions[{index}].tier 无效")
+        if "runtime" in action:
+            _validate_runtime(action["runtime"], f"actions[{index}].runtime", live_state=True)
+        if "project" in action:
+            project = action["project"]
+            _require_type(project, dict, f"actions[{index}].project")
+            _require_keys(
+                project,
+                ("project_root", "artifact_kind", "idle_seconds", "latest_mtime_ns"),
+                f"actions[{index}].project",
+            )
+            if action["rule_id"] != "reviewed.project-artifact":
+                raise ContractError(f"actions[{index}].project 只能用于项目生成目录")
+            for key in ("project_root", "artifact_kind"):
+                _require_type(project[key], str, f"actions[{index}].project.{key}")
+            for key in ("idle_seconds", "latest_mtime_ns"):
+                value = project[key]
+                if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                    raise ContractError(f"actions[{index}].project.{key} 必须是非负整数")
+            if project["idle_seconds"] < MIN_PROJECT_IDLE_SECONDS:
+                raise ContractError(f"actions[{index}].project.idle_seconds 不能少于 1800 秒")
         _require_string_list(action["non_targets"], f"actions[{index}].non_targets")
         for identity_key in ("identity", "parent_identity"):
             label = f"actions[{index}].{identity_key}"

@@ -13,7 +13,7 @@
 | `common.npm-content-cache` | `~/.npm/_cacache` | 不包含 `~/.npmrc` 或其他配置。 |
 | `common.gradle-cache-entry` | `~/.gradle/caches` 下的具体子项 | 不包含项目源码、wrapper 或用户配置。 |
 
-规则授权仅说明路径类别可恢复，执行时仍要通过保护目录、符号链接、文件身份和短期计划检查。
+规则授权仅说明路径类别可恢复，执行时仍要通过保护目录、符号链接、文件身份、父目录、所有者工具运行状态和短期计划检查。pnpm、npm、Gradle、Chrome、Codex、Claude、UTM、Tart、Docker/OrbStack 和微信等已知识别项在进程活动或状态未知时失败关闭；展示的所有者工具命令不会自动执行。
 
 ## 必须人工判断的范围
 
@@ -23,6 +23,10 @@
 - `/Library/Developer/CoreSimulator`：使用 Xcode Settings > Platforms 或 `xcrun simctl runtime list` 判断，不直接操作挂载卷。
 - `/Library`、`/private/var`：只解释系统数据，不由本 Skill 执行。
 - 备份压缩包、磁盘镜像、模型和项目依赖：没有完整恢复证据时保持黄灯。
+
+黄灯默认只能打开查看。受控报告仅可为 `~/Downloads`、`/private/tmp` 或当前用户临时根的直接子项生成 `reviewed_trash` 候选；目标必须属于当前用户，不能是根本身、深层后代、隐藏/敏感目录或符号链接。用户逐项确认后，服务端还要签发与当前计划和完整 action ID 集绑定的 120 秒一次性令牌。普通绿灯 `trash` 与黄灯 `reviewed_trash` 不得混批。
+
+项目阶段例外只扩展到确定性 allowlist 生成目录，例如 `.build`、`DerivedData`、测试报告和测试缓存。执行本轮开发的 Agent 必须先确认测试/构建验证成功、源码已有恢复检查点、相关进程退出；扫描器再检查项目清单、Git ignored 且不含 tracked 内容、Archives/发布包排除、30 分钟静置期和打开文件。任一条件缺失都保持黄灯但不生成操作按钮。通过后也只能 `reviewed_trash`，不能自动或永久删除；首次续用可能需要重新构建或重新下载依赖。
 
 ## 应用和系统内容
 

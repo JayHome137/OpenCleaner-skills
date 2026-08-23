@@ -6,12 +6,14 @@ import tempfile
 import unittest
 from datetime import timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "open-cleaner" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 from policy import PolicyError, SafetyPolicy, build_action_plan, ensure_plan_fresh, parse_time
+from runtime import RuntimeInspector
 
 
 def analysis_for(home: Path, green=None, yellow=None, red=None):
@@ -73,10 +75,45 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(action["rule_id"], "macos.library-cache-entry")
         self.assertEqual(action["mode"], "trash")
 
+    def test_recent_project_tool_outputs_are_not_authorized_as_green(self) -> None:
+        cases = (
+            (
+                self.home / "Library" / "Developer" / "Xcode" / "DerivedData" / "Current",
+                "macos.xcode-derived-data-entry",
+            ),
+            (
+                self.home / "Library" / "Caches" / "ms-playwright",
+                "macos.library-cache-entry",
+            ),
+        )
+        guarded = SafetyPolicy(
+            home=str(self.home),
+            platform="darwin",
+            environment=self.environment,
+            runtime_inspector=RuntimeInspector(
+                "darwin",
+                checker=lambda _pattern: False,
+                tool_checker=lambda _tool: True,
+            ),
+        )
+        for target, rule_id in cases:
+            with self.subTest(rule_id=rule_id):
+                target.mkdir(parents=True)
+                (target / "active.bin").write_bytes(b"active")
+                with self.assertRaises(PolicyError) as raised:
+                    guarded.authorize(str(target), "trash", "green", rule_id)
+                self.assertEqual(raised.exception.code, "project_not_idle")
+
     def test_home_root_is_never_authorized(self) -> None:
         with self.assertRaises(PolicyError) as raised:
             self.policy.authorize(str(self.home), "trash", "green")
         self.assertEqual(raised.exception.code, "protected_root")
+
+    def test_windows_policy_entry_is_disabled(self) -> None:
+        with self.assertRaisesRegex(ValueError, "仅支持 macOS"):
+            SafetyPolicy(
+                home=str(self.home), platform="win32", environment=self.environment
+            )
 
     @unittest.skipUnless(sys.platform == "darwin", "macOS root semantics require a macOS host")
     def test_macos_system_roots_are_never_authorized(self) -> None:
@@ -121,6 +158,72 @@ class PolicyTests(unittest.TestCase):
         with self.assertRaises(PolicyError) as raised:
             self.policy.authorize(str(target), "trash", "green")
         self.assertEqual(raised.exception.code, "no_matching_rule")
+
+    def test_reviewed_trash_validates_direct_user_items_before_project_artifacts(self) -> None:
+        downloads = self.home / "Downloads"
+        downloads.mkdir()
+        direct = downloads / "archive.zip"
+        direct.write_bytes(b"data")
+        nested = downloads / "folder" / "nested.zip"
+        nested.parent.mkdir()
+        nested.write_bytes(b"nested")
+
+        action = self.policy.authorize(str(direct), "reviewed_trash", "yellow")
+        self.assertEqual(action["mode"], "reviewed_trash")
+        self.assertEqual(action["rule_id"], "reviewed.user-item")
+
+        cases = [
+            (str(direct), "trash", "yellow", "tier_denied"),
+            (str(direct), "reviewed_trash", "green", "tier_denied"),
+            (str(nested), "reviewed_trash", "yellow", "review_scope_denied"),
+            (str(downloads), "reviewed_trash", "yellow", "review_scope_denied"),
+        ]
+        for path, mode, tier, expected in cases:
+            with self.subTest(path=path, mode=mode, tier=tier):
+                with self.assertRaises(PolicyError) as raised:
+                    self.policy.authorize(path, mode, tier)
+                self.assertEqual(raised.exception.code, expected)
+
+    def test_reviewed_trash_rejects_hidden_sensitive_symlink_and_wrong_owner(self) -> None:
+        downloads = self.home / "Downloads"
+        downloads.mkdir()
+        hidden = downloads / ".ssh"
+        hidden.mkdir()
+        sensitive = downloads / "Application Support"
+        sensitive.mkdir()
+        real = downloads / "real.zip"
+        real.write_bytes(b"data")
+        link = downloads / "link.zip"
+        link.symlink_to(real)
+
+        for path, expected in (
+            (hidden, "review_sensitive_name"),
+            (sensitive, "review_sensitive_name"),
+            (link, "symlink_denied"),
+        ):
+            with self.subTest(path=path):
+                with self.assertRaises(PolicyError) as raised:
+                    self.policy.authorize(str(path), "reviewed_trash", "yellow")
+                self.assertEqual(raised.exception.code, expected)
+
+        with patch("policy.owner_matches_current_user", return_value=False):
+            with self.assertRaises(PolicyError) as raised:
+                self.policy.authorize(str(real), "reviewed_trash", "yellow")
+        self.assertEqual(raised.exception.code, "wrong_owner")
+
+    def test_reviewed_trash_still_fails_closed_for_active_known_owner(self) -> None:
+        target = self.home / "Downloads" / "ClaudeExport"
+        target.parent.mkdir()
+        target.mkdir()
+        guarded = SafetyPolicy(
+            home=str(self.home),
+            platform="darwin",
+            environment=self.environment,
+            runtime_inspector=RuntimeInspector("darwin", checker=lambda _pattern: True),
+        )
+        with self.assertRaises(PolicyError) as raised:
+            guarded.authorize(str(target), "reviewed_trash", "yellow")
+        self.assertEqual(raised.exception.code, "owner_active")
 
     def test_sensitive_data_can_open_but_cannot_trash(self) -> None:
         target = self.home / "Library" / "Application Support" / "Example"
@@ -242,6 +345,61 @@ class PolicyTests(unittest.TestCase):
                 environment={"HOME": str(other_home)},
             )
         self.assertEqual(raised.exception.code, "home_mismatch")
+
+    def test_active_and_unknown_owner_processes_are_rejected_from_plan(self) -> None:
+        target = self.home / ".npm" / "_cacache"
+        target.mkdir(parents=True)
+        data = analysis_for(
+            self.home,
+            green=[
+                {
+                    "name": "npm cache",
+                    "path": str(target),
+                    "trash_paths": [str(target)],
+                    "rule_id": "common.npm-content-cache",
+                }
+            ],
+        )
+        for process_state, expected in ((True, "owner_active"), (None, "runtime_unknown")):
+            with self.subTest(process_state=process_state):
+                inspector = RuntimeInspector(
+                    "darwin",
+                    checker=lambda _pattern, value=process_state: value,
+                    tool_checker=lambda _tool: True,
+                )
+                plan = build_action_plan(
+                    data,
+                    home=str(self.home),
+                    platform="darwin",
+                    environment=self.environment,
+                    runtime_inspector=inspector,
+                )
+                self.assertEqual(plan["actions"], [])
+                self.assertEqual(plan["rejected"][0]["code"], expected)
+
+    def test_process_started_after_plan_invalidates_action(self) -> None:
+        target = self.home / ".npm" / "_cacache"
+        target.mkdir(parents=True)
+        state = {"active": False}
+        inspector = RuntimeInspector(
+            "darwin",
+            checker=lambda _pattern: state["active"],
+            tool_checker=lambda _tool: True,
+        )
+        guarded = SafetyPolicy(
+            home=str(self.home),
+            platform="darwin",
+            environment=self.environment,
+            runtime_inspector=inspector,
+        )
+        action = guarded.authorize(
+            str(target), "trash", "green", "common.npm-content-cache"
+        )
+        self.assertEqual(action["runtime"]["state"], "inactive")
+        state["active"] = True
+        with self.assertRaises(PolicyError) as raised:
+            guarded.revalidate(action)
+        self.assertEqual(raised.exception.code, "owner_active")
 
 
 if __name__ == "__main__":

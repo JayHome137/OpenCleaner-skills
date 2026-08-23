@@ -21,9 +21,7 @@ def normalized_platform(value: Optional[str] = None) -> str:
     platform = value or sys.platform
     if platform == "darwin":
         return "darwin"
-    if platform.startswith("win"):
-        return "win32"
-    raise RuleError(f"不支持的平台：{platform}")
+    raise RuleError(f"当前版本仅支持 macOS：{platform}")
 
 
 def canonical_path(path: str) -> str:
@@ -114,7 +112,7 @@ class RuleCatalog:
         return data["rules"]
 
     def _load(self) -> tuple[ResolvedRule, ...]:
-        filenames = ["common.json", "macos.json" if self.platform == "darwin" else "windows.json"]
+        filenames = ["common.json", "macos.json"]
         resolved: list[ResolvedRule] = []
         seen_ids: set[str] = set()
         for filename in filenames:

@@ -26,7 +26,7 @@ class EndToEndTests(unittest.TestCase):
             (cache / "cache.bin").write_bytes(b"c" * 4096)
             download.write_bytes(b"d" * 2048)
 
-            engine = ScanEngine("win32", max_workers=2, timeout_seconds=5)
+            engine = ScanEngine("darwin", max_workers=2, timeout_seconds=5)
             groups, coverage = engine.scan_targets(
                 [
                     ScanTarget("caches", str(cache.parent), min_kb=0),
@@ -67,7 +67,10 @@ class EndToEndTests(unittest.TestCase):
 
             self.assertEqual(len(analysis["green"]), 1)
             self.assertEqual(len(analysis["yellow"]), 1)
-            self.assertEqual({action["mode"] for action in plan["actions"]}, {"open", "trash"})
+            self.assertEqual(
+                {action["mode"] for action in plan["actions"]},
+                {"open", "trash", "reviewed_trash"},
+            )
             self.assertTrue(plan["dry_run"])
             self.assertIn("存储分析报告", output.read_text(encoding="utf-8"))
             self.assertTrue(cache.exists())

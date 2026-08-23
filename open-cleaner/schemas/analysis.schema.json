@@ -59,6 +59,7 @@
           "rule_reason": {"type": "string"},
           "rule_risk": {"type": "string"},
           "rule_non_targets": {"type": "array", "items": {"type": "string"}}
+          ,"runtime": {"$ref": "#/$defs/runtimeProfile"}
         }
       }
     },
@@ -76,6 +77,17 @@
           "disposal": {"type": "string"},
           "risk": {"type": "string"},
           "trash_paths": {"type": "array", "items": {"type": "string"}}
+          ,"runtime": {"$ref": "#/$defs/runtimeProfile"}
+          ,"reviewed_trash_paths": {"type": "array", "items": {"type": "string"}}
+          ,"stage_status": {
+            "type": "object",
+            "required": ["state", "code"],
+            "properties": {
+              "state": {"enum": ["ready", "deferred"]},
+              "code": {"type": "string"}
+            },
+            "additionalProperties": false
+          }
         }
       }
     },
@@ -96,6 +108,19 @@
       }
     },
     "denied": {"type": "array", "items": {"type": "string"}},
+    "analysis_origin": {"enum": ["deterministic-draft", "project-stage"]},
+    "project_stage": {
+      "type": "object",
+      "required": ["discovered", "actionable", "actionable_size", "idle_minutes", "min_kb"],
+      "properties": {
+        "discovered": {"type": "integer", "minimum": 0},
+        "actionable": {"type": "integer", "minimum": 0},
+        "actionable_size": {"type": "string"},
+        "idle_minutes": {"type": "integer", "minimum": 0},
+        "min_kb": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
     "summary": {
       "type": "object",
       "required": ["overview", "tier_stats", "priority", "long_term"],
@@ -112,6 +137,26 @@
         },
         "priority": {"type": "array", "items": {"type": "string"}},
         "long_term": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  },
+  "$defs": {
+    "runtimeProfile": {
+      "type": "object",
+      "required": ["id", "processes", "owner_tool"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "processes": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "owner_tool": {
+          "type": "object",
+          "required": ["name", "inspect_command", "cleanup_command", "execution"],
+          "properties": {
+            "name": {"type": "string"},
+            "inspect_command": {"type": "string"},
+            "cleanup_command": {"type": "string"},
+            "execution": {"enum": ["review-only", "app-managed"]}
+          }
+        }
       }
     }
   },

@@ -1,6 +1,6 @@
 interface:
   display_name: "OpenCleaner"
-  short_description: "安全扫描 macOS 和 Windows 磁盘并生成可恢复的分级处置报告"
+  short_description: "安全扫描 macOS 磁盘并生成可恢复的分级处置报告"
   brand_color: "#0F766E"
   default_prompt: "使用 $open-cleaner 扫描电脑存储空间，按确定性规则和风险生成分级报告。"
 

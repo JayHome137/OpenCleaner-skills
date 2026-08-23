@@ -9,17 +9,24 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "open-cleaner" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-from scan import ScanEngine, ScanTarget
+from scan import ScanEngine, ScanTarget, scan_current
+from scan import macos_targets
 
 
 class ScanEngineTests(unittest.TestCase):
+    def test_macos_targets_include_bounded_temp_roots(self) -> None:
+        targets = macos_targets("/Users/test")
+        temp_paths = {target.path for target in targets if target.group == "temp"}
+        self.assertIn("/private/tmp", temp_paths)
+        self.assertTrue(all(target.mode == "children" for target in targets if target.group == "temp"))
+
     def test_scan_deduplicates_scheduled_paths_and_reports_coverage(self) -> None:
         with tempfile.TemporaryDirectory(prefix="storage-scan-") as temp:
             root = Path(temp)
             child = root / "cache"
             child.mkdir()
             (child / "data.bin").write_bytes(b"x" * 4096)
-            engine = ScanEngine("win32", max_workers=2, timeout_seconds=5)
+            engine = ScanEngine("darwin", max_workers=2, timeout_seconds=5)
             groups, coverage = engine.scan_targets(
                 [
                     ScanTarget("first", str(root), min_kb=0),
@@ -35,7 +42,7 @@ class ScanEngineTests(unittest.TestCase):
     def test_missing_root_is_structured_error(self) -> None:
         with tempfile.TemporaryDirectory(prefix="storage-scan-") as temp:
             missing = str(Path(temp) / "missing")
-            engine = ScanEngine("win32", max_workers=1, timeout_seconds=2)
+            engine = ScanEngine("darwin", max_workers=1, timeout_seconds=2)
             _groups, coverage = engine.scan_targets([ScanTarget("missing", missing)])
             self.assertEqual(coverage["skipped_roots"], 1)
             self.assertEqual(engine.errors[0]["code"], "missing_root")
@@ -43,7 +50,7 @@ class ScanEngineTests(unittest.TestCase):
 
     def test_cancel_before_enumeration_is_structured_and_schedules_nothing(self) -> None:
         with tempfile.TemporaryDirectory(prefix="storage-scan-") as temp:
-            engine = ScanEngine("win32", max_workers=1, timeout_seconds=2)
+            engine = ScanEngine("darwin", max_workers=1, timeout_seconds=2)
             engine.cancel()
             groups, coverage = engine.scan_targets([ScanTarget("cancelled", temp, min_kb=0)])
             self.assertEqual(groups["cancelled"], [])
@@ -60,12 +67,18 @@ class ScanEngineTests(unittest.TestCase):
                 (directory / "same.bin").write_bytes(b"x" * 4096)
             orders = []
             for _ in range(4):
-                engine = ScanEngine("win32", max_workers=3, timeout_seconds=5)
+                engine = ScanEngine("darwin", max_workers=3, timeout_seconds=5)
                 groups, _coverage = engine.scan_targets(
                     [ScanTarget("same", str(root), min_kb=0)]
                 )
                 orders.append([item["name"] for item in groups["same"]])
             self.assertTrue(all(order == ["Alpha", "beta", "zeta"] for order in orders))
+
+    def test_windows_public_scan_entry_is_disabled(self) -> None:
+        with self.assertRaisesRegex(ValueError, "macOS only"):
+            ScanEngine("win32")
+        with self.assertRaisesRegex(ValueError, "macOS only"):
+            scan_current(platform="win32")
 
 
 if __name__ == "__main__":

@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "open-cleaner" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-from rules import RuleCatalog
+from rules import RuleCatalog, RuleError, normalized_platform
 
 
 class RuleCatalogTests(unittest.TestCase):
@@ -33,6 +33,12 @@ class RuleCatalogTests(unittest.TestCase):
             target.mkdir(parents=True)
             catalog = RuleCatalog("darwin", {"HOME": str(home)})
             self.assertIsNone(catalog.match(str(target), "trash"))
+
+    def test_windows_rule_entry_is_disabled(self) -> None:
+        with self.assertRaisesRegex(RuleError, "仅支持 macOS"):
+            normalized_platform("win32")
+        with self.assertRaises(RuleError):
+            RuleCatalog("win32", {"HOME": "/tmp/example"})
 
 
 if __name__ == "__main__":

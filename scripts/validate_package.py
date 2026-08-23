@@ -8,6 +8,7 @@ import py_compile
 import sys
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL_DIR = ROOT / "open-cleaner"
@@ -38,12 +39,13 @@ REQUIRED_FILES = [
     SCRIPTS_DIR / "contracts.py",
     SCRIPTS_DIR / "file_ops.py",
     SCRIPTS_DIR / "policy.py",
+    SCRIPTS_DIR / "project_artifacts.py",
+    SCRIPTS_DIR / "project_stage.py",
     SCRIPTS_DIR / "rules.py",
     SCRIPTS_DIR / "scan.py",
     SCRIPTS_DIR / "server.py",
     SCRIPTS_DIR / "validate_plan.py",
     ROOT / ".github" / "workflows" / "macos-validation.yml",
-    ROOT / ".github" / "workflows" / "windows-validation.yml",
     ROOT / "README.md",
     ROOT / "LICENSE",
     ROOT / "NOTICE",
@@ -181,6 +183,47 @@ def check_no_permanent_delete_surface() -> None:
             fail(f"report template missing guarded result surface: {required}")
 
 
+def check_macos_only_surface() -> None:
+    skill = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
+    metadata = (SKILL_DIR / "agents" / "openai.yaml").read_text(encoding="utf-8")
+    if "macOS / Windows" in skill or "macOS 和 Windows" in metadata:
+        fail("public Skill metadata still advertises Windows support")
+
+    sys.path.insert(0, str(SCRIPTS_DIR))
+    try:
+        import classify
+        import build_report
+        import contracts
+        import rules
+        import scan
+    except ImportError as exc:
+        fail(f"runtime import failed: {exc}")
+
+    rejected = 0
+    for probe in (
+        lambda: rules.normalized_platform("win32"),
+        lambda: scan.scan_current(platform="win32"),
+        lambda: classify.platform_from_scan({"system": {"os": "Windows 11"}}),
+    ):
+        try:
+            probe()
+        except (ValueError, contracts.ContractError, rules.RuleError):
+            rejected += 1
+    with patch("build_report.sys.platform", "win32"):
+        try:
+            build_report.build_report("unused.json", "unused.html")
+        except contracts.ContractError:
+            rejected += 1
+    if rejected != 4:
+        fail("Windows public runtime entry did not fail closed")
+
+    action_schema = json.loads(
+        (SKILL_DIR / "schemas" / "action-plan.schema.json").read_text(encoding="utf-8")
+    )
+    if action_schema["properties"]["platform"] != {"const": "darwin"}:
+        fail("action-plan schema still permits a non-macOS platform")
+
+
 def check_runtime_imports_and_static_report() -> None:
     sys.path.insert(0, str(SCRIPTS_DIR))
     try:
@@ -228,6 +271,7 @@ def main() -> None:
     check_python_syntax()
     check_json_files()
     check_no_permanent_delete_surface()
+    check_macos_only_surface()
     check_runtime_imports_and_static_report()
     print("open-cleaner package validation passed")
 

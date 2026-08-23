@@ -3,7 +3,7 @@
   "rules": [
     {
       "id": "common.user-cache-entry",
-      "platforms": ["darwin", "win32"],
+      "platforms": ["darwin"],
       "root": "${HOME}/.cache",
       "min_depth": 1,
       "actions": ["trash"],
@@ -15,7 +15,7 @@
     },
     {
       "id": "common.npm-content-cache",
-      "platforms": ["darwin", "win32"],
+      "platforms": ["darwin"],
       "root": "${HOME}/.npm/_cacache",
       "min_depth": 0,
       "actions": ["trash"],
@@ -27,7 +27,7 @@
     },
     {
       "id": "common.gradle-cache-entry",
-      "platforms": ["darwin", "win32"],
+      "platforms": ["darwin"],
       "root": "${HOME}/.gradle/caches",
       "min_depth": 1,
       "actions": ["trash"],

@@ -23,7 +23,7 @@
     "plan_id": {"type": "string", "minLength": 16},
     "generated_at": {"type": "string"},
     "expires_at": {"type": "string"},
-    "platform": {"enum": ["darwin", "win32"]},
+    "platform": {"const": "darwin"},
     "home": {"type": "string"},
     "source_analysis_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "actions": {
@@ -45,7 +45,7 @@
         ],
         "properties": {
           "action_id": {"type": "string", "minLength": 16},
-          "mode": {"enum": ["open", "trash"]},
+          "mode": {"enum": ["open", "trash", "reviewed_trash"]},
           "path": {"type": "string"},
           "canonical_path": {"type": "string"},
           "tier": {"enum": ["green", "yellow", "red"]},
@@ -76,6 +76,27 @@
               "kind": {"const": "directory"},
               "size": {"type": "integer", "minimum": 0},
               "mtime_ns": {"type": "integer"}
+            },
+            "additionalProperties": false
+          },
+          "runtime": {
+            "type": "object",
+            "required": ["id", "processes", "owner_tool", "state"],
+            "properties": {
+              "id": {"type": "string"},
+              "processes": {"type": "array", "items": {"type": "string"}},
+              "owner_tool": {"type": "object"},
+              "state": {"enum": ["active", "inactive", "unknown"]}
+            }
+          },
+          "project": {
+            "type": "object",
+            "required": ["project_root", "artifact_kind", "idle_seconds", "latest_mtime_ns"],
+            "properties": {
+              "project_root": {"type": "string"},
+              "artifact_kind": {"type": "string"},
+              "idle_seconds": {"type": "integer", "minimum": 1800},
+              "latest_mtime_ns": {"type": "integer", "minimum": 0}
             },
             "additionalProperties": false
           }

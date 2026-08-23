@@ -6,7 +6,7 @@ Usage:
 
 The browser never submits paths or operation modes. It submits action IDs from
 an in-memory plan; the server revalidates every target before execution. The
-only mutating action is moving an authorized path to Trash/Recycle Bin.
+mutating modes only move an authorized path to the macOS Trash.
 """
 from __future__ import annotations
 
@@ -14,15 +14,17 @@ import json
 import secrets
 import sys
 import threading
+import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Callable, Mapping, Optional, Sequence
 
 HERE = Path(__file__).resolve().parent
 TEMPLATE = HERE.parent / "assets" / "report_template.html"
 MAX_REQUEST_BYTES = 64 * 1024
 MAX_ACTIONS_PER_REQUEST = 50
+REVIEW_TOKEN_TTL_SECONDS = 120
 
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
@@ -54,6 +56,7 @@ class ServerContext:
         plan: dict[str, Any],
         operator: Optional[FileOperator] = None,
         token: Optional[str] = None,
+        rescan_handler: Optional[Callable[[], dict[str, Any]]] = None,
     ) -> None:
         self.analysis = validate_analysis(analysis)
         validate_action_plan(plan)
@@ -66,24 +69,63 @@ class ServerContext:
         self.plan = plan
         self.operator = operator or FileOperator(policy, OperationLog())
         self.token = token or secrets.token_urlsafe(32)
+        self.rescan_handler = rescan_handler
         self.actions = {action["action_id"]: action for action in plan["actions"]}
         self.completed: set[str] = set()
+        self.review_tokens: dict[str, dict[str, Any]] = {}
         self.lock = threading.Lock()
 
     def public_config(self) -> dict[str, Any]:
         return {
             "token": self.token,
             "endpoint": "/action",
+            "review_endpoint": "/review" if any(
+                action["mode"] == "reviewed_trash" for action in self.plan["actions"]
+            ) else "",
+            "rescan_endpoint": "/rescan" if self.rescan_handler else "",
             "plan_id": self.plan["plan_id"],
             "expires_at": self.plan["expires_at"],
+            "rejected": [
+                {
+                    "path": item["path"],
+                    "mode": item["mode"],
+                    "code": item["code"],
+                    "message": item["message"],
+                }
+                for item in self.plan["rejected"]
+            ],
             "actions": [
                 {
                     "action_id": action["action_id"],
                     "mode": action["mode"],
                     "path": action["path"],
+                    **({"runtime": action["runtime"]} if action.get("runtime") else {}),
                 }
                 for action in self.plan["actions"]
             ],
+        }
+
+    def rescan(self) -> dict[str, Any]:
+        if self.rescan_handler is None:
+            raise PolicyError("rescan_unavailable", "当前报告不支持重新扫描")
+        refreshed = validate_analysis(self.rescan_handler())
+        refreshed_plan = build_action_plan(
+            refreshed,
+            home=self.policy.home,
+            platform=self.policy.platform,
+            environment=self.policy.environment,
+            purpose="session",
+            runtime_inspector=self.policy.runtime_inspector,
+        )
+        self.analysis = refreshed
+        self.plan = refreshed_plan
+        self.actions = {action["action_id"]: action for action in refreshed_plan["actions"]}
+        self.completed.clear()
+        self.review_tokens.clear()
+        return {
+            "ok": True,
+            "plan_id": refreshed_plan["plan_id"],
+            "expires_at": refreshed_plan["expires_at"],
         }
 
     def render(self) -> str:
@@ -93,23 +135,73 @@ class ServerContext:
             "__DELETE_CONFIG__", config_blob
         )
 
-    def execute(self, action_ids: Sequence[str]) -> dict[str, Any]:
+    def _resolve_actions(self, action_ids: Sequence[str]) -> list[dict[str, Any]]:
         if not action_ids or len(action_ids) > MAX_ACTIONS_PER_REQUEST:
             raise PolicyError("invalid_batch", "操作数量必须在 1 到 50 之间")
         if len(set(action_ids)) != len(action_ids):
             raise PolicyError("duplicate_action", "一次请求不能包含重复操作")
-        ensure_plan_fresh(self.plan)
         try:
             actions = [self.actions[action_id] for action_id in action_ids]
         except KeyError as exc:
             raise PolicyError("unknown_action", "操作 ID 不属于当前计划") from exc
         for action in actions:
-            if action["mode"] == "trash" and action["action_id"] in self.completed:
+            if action["mode"] in ("trash", "reviewed_trash") and action[
+                "action_id"
+            ] in self.completed:
                 raise PolicyError("action_completed", "该目标已经处理，请重新扫描")
+        return actions
+
+    def review(self, action_ids: Sequence[str]) -> dict[str, Any]:
+        ensure_plan_fresh(self.plan)
+        actions = self._resolve_actions(action_ids)
+        if any(action["mode"] != "reviewed_trash" for action in actions):
+            raise PolicyError("review_mode_required", "复核令牌只能签发给黄灯人工复核动作")
+        for action in actions:
+            self.policy.revalidate(action)
+        review_token = secrets.token_urlsafe(32)
+        self.review_tokens[review_token] = {
+            "plan_id": self.plan["plan_id"],
+            "action_ids": tuple(sorted(action_ids)),
+            "expires_at": time.monotonic() + REVIEW_TOKEN_TTL_SECONDS,
+            "used": False,
+        }
+        return {
+            "ok": True,
+            "review_token": review_token,
+            "expires_in_seconds": REVIEW_TOKEN_TTL_SECONDS,
+        }
+
+    def execute(
+        self,
+        action_ids: Sequence[str],
+        review_token: Optional[str] = None,
+    ) -> dict[str, Any]:
+        ensure_plan_fresh(self.plan)
+        actions = self._resolve_actions(action_ids)
+        reviewed = [action for action in actions if action["mode"] == "reviewed_trash"]
+        if reviewed and len(reviewed) != len(actions):
+            raise PolicyError("mixed_review_batch", "普通动作与黄灯人工复核动作不能混合提交")
+        token_record = None
+        if reviewed:
+            token_record = self.review_tokens.get(review_token or "")
+            if token_record is None:
+                raise PolicyError("review_token_required", "缺少有效的黄灯复核令牌")
+            if token_record["used"]:
+                raise PolicyError("review_token_used", "黄灯复核令牌已经使用")
+            if token_record["expires_at"] <= time.monotonic():
+                raise PolicyError("review_token_expired", "黄灯复核令牌已经过期")
+            if token_record["plan_id"] != self.plan["plan_id"] or token_record[
+                "action_ids"
+            ] != tuple(sorted(action_ids)):
+                raise PolicyError("review_token_mismatch", "黄灯复核令牌与当前操作不匹配")
+        elif review_token:
+            raise PolicyError("unexpected_review_token", "普通动作不能携带黄灯复核令牌")
 
         # Validate the full batch before the first side effect.
         for action in actions:
             self.policy.revalidate(action)
+        if token_record is not None:
+            token_record["used"] = True
 
         results = []
         completed_this_request = 0
@@ -120,7 +212,10 @@ class ServerContext:
                 self.plan["purpose"],
             )
             results.append(result)
-            if result["status"] == "completed" and action["mode"] == "trash":
+            if result["status"] == "completed" and action["mode"] in (
+                "trash",
+                "reviewed_trash",
+            ):
                 self.completed.add(action["action_id"])
                 completed_this_request += 1
             if result["status"] != "completed":
@@ -150,9 +245,32 @@ def create_context(
         platform=policy.platform,
         environment=policy.environment,
         purpose="session",
+        runtime_inspector=policy.runtime_inspector,
     )
     operator = FileOperator(policy, OperationLog(state_dir))
-    return ServerContext(analysis, template, policy, plan, operator=operator)
+
+    def rescan_current() -> dict[str, Any]:
+        if analysis.get("analysis_origin") == "project-stage":
+            from project_stage import build_project_stage_analysis
+
+            return build_project_stage_analysis(
+                environment=policy.environment,
+                min_kb=int(analysis["project_stage"].get("min_kb", 50 * 1024)),
+            )
+        from classify import build_analysis
+        from scan import scan_current
+
+        scan_result = scan_current(platform=policy.platform)
+        return build_analysis(scan_result, environment=policy.environment)
+
+    return ServerContext(
+        analysis,
+        template,
+        policy,
+        plan,
+        operator=operator,
+        rescan_handler=rescan_current,
+    )
 
 
 def make_handler(context: ServerContext) -> type[BaseHTTPRequestHandler]:
@@ -194,7 +312,7 @@ def make_handler(context: ServerContext) -> type[BaseHTTPRequestHandler]:
             self._send(200, context.render(), "text/html; charset=utf-8")
 
         def do_POST(self) -> None:
-            if self.path != "/action":
+            if self.path not in ("/action", "/review", "/rescan"):
                 self._send(404, {"ok": False, "error": "not found"})
                 return
             if not self._host_allowed():
@@ -215,7 +333,16 @@ def make_handler(context: ServerContext) -> type[BaseHTTPRequestHandler]:
             except (json.JSONDecodeError, UnicodeDecodeError):
                 self._send(400, {"ok": False, "error": "请求 JSON 无效"})
                 return
-            if not isinstance(request, dict) or set(request) != {"token", "plan_id", "action_ids"}:
+            if self.path == "/action":
+                expected_fields = (
+                    {"token", "plan_id", "action_ids"},
+                    {"token", "plan_id", "action_ids", "review_token"},
+                )
+            elif self.path == "/review":
+                expected_fields = ({"token", "plan_id", "action_ids"},)
+            else:
+                expected_fields = ({"token", "plan_id"},)
+            if not isinstance(request, dict) or set(request) not in expected_fields:
                 self._send(400, {"ok": False, "error": "请求字段无效"})
                 return
             if not secrets.compare_digest(str(request.get("token", "")), context.token):
@@ -224,14 +351,30 @@ def make_handler(context: ServerContext) -> type[BaseHTTPRequestHandler]:
             if request.get("plan_id") != context.plan["plan_id"]:
                 self._send(409, {"ok": False, "error": "操作计划已经变化"})
                 return
-            action_ids = request.get("action_ids")
-            if not isinstance(action_ids, list) or any(not isinstance(item, str) for item in action_ids):
-                self._send(400, {"ok": False, "error": "action_ids 格式无效"})
-                return
             try:
                 with context.lock:
-                    response = context.execute(action_ids)
-            except PolicyError as exc:
+                    if self.path == "/rescan":
+                        response = context.rescan()
+                    else:
+                        action_ids = request.get("action_ids")
+                        if not isinstance(action_ids, list) or any(
+                            not isinstance(item, str) for item in action_ids
+                        ):
+                            self._send(400, {"ok": False, "error": "action_ids 格式无效"})
+                            return
+                        if self.path == "/review":
+                            response = context.review(action_ids)
+                        else:
+                            review_token = request.get("review_token")
+                            if review_token is not None and not isinstance(review_token, str):
+                                self._send(400, {"ok": False, "error": "review_token 格式无效"})
+                                return
+                            response = context.execute(action_ids, review_token=review_token)
+            except (ContractError, PolicyError, OSError, ValueError) as exc:
+                if not isinstance(exc, PolicyError):
+                    label = "重新扫描失败" if self.path == "/rescan" else "请求处理失败"
+                    self._send(500, {"ok": False, "error": f"{label}：{exc}"})
+                    return
                 self._send(409, {"ok": False, "error": str(exc), "code": exc.code})
                 return
             self._send(200 if response.get("ok") else 500, response)
@@ -253,10 +396,14 @@ def main() -> None:
     port = server.server_address[1]
     url = f"http://127.0.0.1:{port}/"
     trash_count = sum(1 for action in context.plan["actions"] if action["mode"] == "trash")
+    reviewed_count = sum(
+        1 for action in context.plan["actions"] if action["mode"] == "reviewed_trash"
+    )
     open_count = sum(1 for action in context.plan["actions"] if action["mode"] == "open")
     print(f"报告服务已启动：{url}")
     print(
-        f"已授权移到废纸篓 {trash_count} 项 | 可打开查看 {open_count} 项 | "
+        f"绿灯可移到废纸篓 {trash_count} 项 | 黄灯可人工复核 {reviewed_count} 项 | "
+        f"可打开查看 {open_count} 项 | "
         f"拒绝 {len(context.plan['rejected'])} 项"
     )
     print("所有操作计划 30 分钟后失效；用完按 Ctrl+C 停止服务。")

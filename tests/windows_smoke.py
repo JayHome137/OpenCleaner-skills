@@ -99,7 +99,15 @@ def main() -> None:
         assert any(item["rule_id"] == "windows.temp-entry" for item in analysis["green"])
         assert action_plan["actions"], "deterministic rules should authorize disposable cache actions"
         assert action_plan["purpose"] == "dry-run" and action_plan["dry_run"] is True
-        assert all(action["mode"] in ("open", "trash") for action in action_plan["actions"])
+        assert all(
+            action["mode"] in ("open", "trash", "reviewed_trash")
+            for action in action_plan["actions"]
+        )
+        assert any(
+            action["mode"] == "reviewed_trash"
+            and action["canonical_path"].endswith("installer.iso")
+            for action in action_plan["actions"]
+        )
 
         analysis_path = base / "analysis.json"
         report_path = base / "report.html"

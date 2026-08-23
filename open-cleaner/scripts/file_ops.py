@@ -38,9 +38,6 @@ def default_state_dir() -> Path:
     override = os.environ.get("OPEN_CLEANER_STATE_DIR")
     if override:
         return Path(override).expanduser()
-    if sys.platform.startswith("win"):
-        root = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
-        return Path(root) / "OpenCleaner"
     return Path(os.path.expanduser("~")) / ".local" / "state" / "open-cleaner"
 
 
@@ -117,22 +114,18 @@ def _trash_windows(path: str) -> None:
 def move_to_trash(path: str) -> None:
     if sys.platform == "darwin":
         _trash_macos(path)
-    elif sys.platform.startswith("win"):
-        _trash_windows(path)
     else:
-        raise FileOperationError("移到废纸篓仅支持 macOS 和 Windows")
+        raise FileOperationError("当前版本的废纸篓操作仅支持 macOS")
 
 
 def open_in_file_manager(path: str) -> None:
     if sys.platform == "darwin":
         command = ["/usr/bin/open", "-R", path]
-    elif sys.platform.startswith("win"):
-        command = ["explorer", "/select,", path]
     else:
-        raise FileOperationError("打开文件管理器仅支持 macOS 和 Windows")
+        raise FileOperationError("当前版本的文件管理器操作仅支持 macOS")
     result = subprocess.run(command, capture_output=True, text=True, timeout=15, check=False)
     if result.returncode != 0:
-        manager = "访达" if sys.platform == "darwin" else "资源管理器"
+        manager = "访达"
         detail = (result.stderr or result.stdout or f"无法在{manager}打开目标").strip()
         raise FileOperationError(detail)
 
@@ -169,7 +162,7 @@ class FileOperator:
         }
         log_path = getattr(self.operation_log, "path", None)
         if (
-            action.get("mode") == "trash"
+            action.get("mode") in ("trash", "reviewed_trash")
             and log_path is not None
             and path_is_within(str(log_path), str(action["canonical_path"]))
         ):
@@ -190,7 +183,7 @@ class FileOperator:
             if plan_purpose != "session":
                 raise PolicyError("dry_run_only", "Dry Run 计划不能执行文件操作")
             self.policy.revalidate(action)
-            if action["mode"] == "trash":
+            if action["mode"] in ("trash", "reviewed_trash"):
                 target = str(action["canonical_path"])
                 parent = os.path.dirname(target)
                 result["disk_free_before_bytes"] = disk_free_bytes(parent)

@@ -10,6 +10,7 @@ import urllib.request
 from contextlib import contextmanager
 from http.server import ThreadingHTTPServer
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "open-cleaner" / "scripts"
@@ -17,7 +18,8 @@ sys.path.insert(0, str(SCRIPTS))
 
 from file_ops import FileOperator, OperationLog
 from policy import PolicyError, SafetyPolicy, build_action_plan
-from server import ServerContext, make_handler
+from runtime import RuntimeInspector
+from server import ServerContext, create_context, make_handler
 from test_policy import analysis_for
 
 
@@ -53,7 +55,7 @@ class ServerContextTests(unittest.TestCase):
         path.mkdir(parents=True)
         return path
 
-    def make_context(self, paths, called):
+    def make_context(self, paths, called, rescan_handler=None):
         green = [
             {"name": path.name, "path": str(path), "trash_paths": [str(path)]}
             for path in paths
@@ -85,6 +87,51 @@ class ServerContextTests(unittest.TestCase):
             plan,
             operator=operator,
             token="test-token",
+            rescan_handler=rescan_handler,
+        )
+
+    def make_review_context(self, paths, called):
+        yellow = [
+            {
+                "name": path.name,
+                "path": str(path),
+                "size": "约 0.0 GB",
+                "content_profile": "test",
+                "why_manual": "test",
+                "disposal": "test",
+                "risk": "test",
+                "reviewed_trash_paths": [str(path)],
+            }
+            for path in paths
+        ]
+        analysis = analysis_for(self.home, yellow=yellow)
+        plan = build_action_plan(
+            analysis,
+            home=str(self.home),
+            platform="darwin",
+            environment=self.environment,
+            purpose="session",
+        )
+        fake_trash = self.root / "fake-trash"
+
+        def move(path: str) -> None:
+            called.append(path)
+            fake_trash.mkdir(exist_ok=True)
+            Path(path).rename(fake_trash / Path(path).name)
+
+        operator = FileOperator(
+            self.policy,
+            OperationLog(self.root / "state"),
+            trash_handler=move,
+            open_handler=lambda _path: None,
+        )
+        return ServerContext(
+            analysis,
+            "__REPORT_DATA____DELETE_CONFIG__",
+            self.policy,
+            plan,
+            operator=operator,
+            token="test-token",
         )
 
     def test_render_exposes_action_ids_but_no_path_submission_contract(self) -> None:
@@ -97,6 +144,46 @@ class ServerContextTests(unittest.TestCase):
             context.public_config()["actions"][0]["path"],
             str(target.absolute()),
         )
+
+    def test_public_config_explains_runtime_rejection_without_action(self) -> None:
+        target = self.home / ".npm" / "_cacache"
+        target.mkdir(parents=True)
+        analysis = analysis_for(
+            self.home,
+            green=[
+                {
+                    "name": target.name,
+                    "path": str(target),
+                    "trash_paths": [str(target)],
+                    "rule_id": "common.npm-content-cache",
+                }
+            ],
+        )
+        inspector = RuntimeInspector("darwin", checker=lambda _pattern: True)
+        policy = SafetyPolicy(
+            home=str(self.home),
+            platform="darwin",
+            environment=self.environment,
+            runtime_inspector=inspector,
+        )
+        plan = build_action_plan(
+            analysis,
+            home=str(self.home),
+            platform="darwin",
+            environment=self.environment,
+            purpose="session",
+            runtime_inspector=inspector,
+        )
+        context = ServerContext(
+            analysis,
+            "__REPORT_DATA____DELETE_CONFIG__",
+            policy,
+            plan,
+            token="test-token",
+        )
+        config = context.public_config()
+        self.assertEqual(config["actions"], [])
+        self.assertEqual(config["rejected"][0]["code"], "owner_active")
 
     def test_dry_run_plan_cannot_start_operation_session(self) -> None:
         target = self.make_cache("one")
@@ -163,6 +250,15 @@ class ServerContextTests(unittest.TestCase):
     def post(self, port: int, body: dict):
         request = urllib.request.Request(
             f"http://127.0.0.1:{port}/action",
+            data=json.dumps(body).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        return urllib.request.urlopen(request, timeout=3)
+
+    def post_endpoint(self, port: int, endpoint: str, body: dict):
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{port}{endpoint}",
             data=json.dumps(body).encode("utf-8"),
             headers={"Content-Type": "application/json"},
             method="POST",
@@ -275,6 +371,222 @@ class ServerContextTests(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError) as raised:
                 urllib.request.urlopen(request, timeout=3)
             self.assertEqual(raised.exception.code, 413)
+
+    def test_rescan_replaces_plan_and_actions_atomically(self) -> None:
+        original = self.make_cache("original")
+        refreshed = self.make_cache("refreshed")
+        refreshed_analysis = analysis_for(
+            self.home,
+            green=[
+                {
+                    "name": refreshed.name,
+                    "path": str(refreshed),
+                    "trash_paths": [str(refreshed)],
+                }
+            ],
+        )
+        context = self.make_context([original], [], rescan_handler=lambda: refreshed_analysis)
+        old_plan_id = context.plan["plan_id"]
+        old_action_id = context.plan["actions"][0]["action_id"]
+
+        with running(context) as port:
+            with self.post_endpoint(
+                port,
+                "/rescan",
+                {"token": "test-token", "plan_id": old_plan_id},
+            ) as response:
+                payload = json.loads(response.read())
+
+        self.assertTrue(payload["ok"])
+        self.assertNotEqual(payload["plan_id"], old_plan_id)
+        self.assertNotIn(old_action_id, context.actions)
+        self.assertEqual(context.analysis, refreshed_analysis)
+        self.assertEqual(context.public_config()["rescan_endpoint"], "/rescan")
+
+    def test_failed_rescan_preserves_current_plan(self) -> None:
+        target = self.make_cache("original")
+
+        def fail_rescan():
+            raise OSError("fixture scan failed")
+
+        context = self.make_context([target], [], rescan_handler=fail_rescan)
+        old_analysis = context.analysis
+        old_plan = context.plan
+        old_actions = context.actions
+
+        with running(context) as port:
+            with self.assertRaises(urllib.error.HTTPError) as raised:
+                self.post_endpoint(
+                    port,
+                    "/rescan",
+                    {"token": "test-token", "plan_id": old_plan["plan_id"]},
+                )
+            self.assertEqual(raised.exception.code, 500)
+
+        self.assertIs(context.analysis, old_analysis)
+        self.assertIs(context.plan, old_plan)
+        self.assertIs(context.actions, old_actions)
+
+    def test_project_stage_rescan_preserves_analysis_mode(self) -> None:
+        import project_stage
+
+        analysis = analysis_for(self.home)
+        analysis["analysis_origin"] = "project-stage"
+        analysis["project_stage"] = {
+            "discovered": 0,
+            "actionable": 0,
+            "actionable_size": "约 0.0 GB",
+            "idle_minutes": 30,
+            "min_kb": 1234,
+        }
+        source = self.root / "project-stage.json"
+        source.write_text(json.dumps(analysis), encoding="utf-8")
+        context = create_context(
+            str(source),
+            home=str(self.home),
+            platform="darwin",
+            environment=self.environment,
+            state_dir=str(self.root / "project-state"),
+        )
+        with patch.object(
+            project_stage, "build_project_stage_analysis", return_value=analysis
+        ) as rebuild:
+            response = context.rescan()
+        self.assertTrue(response["ok"])
+        rebuild.assert_called_once_with(
+            environment=context.policy.environment,
+            min_kb=1234,
+        )
+
+    def test_rescan_rejects_extra_fields_and_is_hidden_when_unavailable(self) -> None:
+        target = self.make_cache("one")
+        context = self.make_context([target], [])
+        self.assertEqual(context.public_config()["rescan_endpoint"], "")
+        with running(context) as port:
+            with self.assertRaises(urllib.error.HTTPError) as raised:
+                self.post_endpoint(
+                    port,
+                    "/rescan",
+                    {
+                        "token": "test-token",
+                        "plan_id": context.plan["plan_id"],
+                        "path": str(target),
+                    },
+                )
+            self.assertEqual(raised.exception.code, 400)
+
+    def test_reviewed_trash_requires_matching_short_lived_one_time_token(self) -> None:
+        downloads = self.home / "Downloads"
+        downloads.mkdir()
+        first = downloads / "first.zip"
+        second = downloads / "second.zip"
+        first.write_bytes(b"first")
+        second.write_bytes(b"second")
+        called = []
+        context = self.make_review_context([first, second], called)
+        review_ids = [
+            action["action_id"]
+            for action in context.plan["actions"]
+            if action["mode"] == "reviewed_trash"
+        ]
+
+        with self.assertRaises(PolicyError) as raised:
+            context.execute([review_ids[0]])
+        self.assertEqual(raised.exception.code, "review_token_required")
+
+        review = context.review([review_ids[0]])
+        token = review["review_token"]
+        with self.assertRaises(PolicyError) as raised:
+            context.execute([review_ids[1]], review_token=token)
+        self.assertEqual(raised.exception.code, "review_token_mismatch")
+
+        context.review_tokens[token]["expires_at"] = 0
+        with self.assertRaises(PolicyError) as raised:
+            context.execute([review_ids[0]], review_token=token)
+        self.assertEqual(raised.exception.code, "review_token_expired")
+        self.assertEqual(called, [])
+
+        valid = context.review([review_ids[0]])
+        response = context.execute([review_ids[0]], review_token=valid["review_token"])
+        self.assertTrue(response["ok"])
+        self.assertTrue(context.review_tokens[valid["review_token"]]["used"])
+        self.assertEqual(called, [str(first.resolve())])
+        context.completed.clear()
+        with self.assertRaises(PolicyError) as raised:
+            context.execute([review_ids[0]], review_token=valid["review_token"])
+        self.assertEqual(raised.exception.code, "review_token_used")
+
+    def test_reviewed_trash_cannot_mix_with_open_action(self) -> None:
+        downloads = self.home / "Downloads"
+        downloads.mkdir()
+        target = downloads / "archive.zip"
+        target.write_bytes(b"data")
+        context = self.make_review_context([target], [])
+        reviewed_id = next(
+            action["action_id"]
+            for action in context.plan["actions"]
+            if action["mode"] == "reviewed_trash"
+        )
+        open_id = next(
+            action["action_id"]
+            for action in context.plan["actions"]
+            if action["mode"] == "open"
+        )
+        token = context.review([reviewed_id])["review_token"]
+        with self.assertRaises(PolicyError) as raised:
+            context.execute([reviewed_id, open_id], review_token=token)
+        self.assertEqual(raised.exception.code, "mixed_review_batch")
+
+    def test_review_endpoint_rejects_paths_and_green_actions(self) -> None:
+        target = self.make_cache("one")
+        context = self.make_context([target], [])
+        action_id = context.plan["actions"][0]["action_id"]
+        with self.assertRaises(PolicyError) as raised:
+            context.review([action_id])
+        self.assertEqual(raised.exception.code, "review_mode_required")
+
+        with running(context) as port:
+            with self.assertRaises(urllib.error.HTTPError) as raised:
+                self.post_endpoint(
+                    port,
+                    "/review",
+                    {
+                        "token": "test-token",
+                        "plan_id": context.plan["plan_id"],
+                        "paths": [str(target)],
+                    },
+                )
+            self.assertEqual(raised.exception.code, 400)
+
+    def test_http_review_then_action_moves_only_bound_target(self) -> None:
+        downloads = self.home / "Downloads"
+        downloads.mkdir()
+        target = downloads / "archive.zip"
+        target.write_bytes(b"data")
+        called = []
+        context = self.make_review_context([target], called)
+        action_id = next(
+            action["action_id"]
+            for action in context.plan["actions"]
+            if action["mode"] == "reviewed_trash"
+        )
+        base = {
+            "token": "test-token",
+            "plan_id": context.plan["plan_id"],
+            "action_ids": [action_id],
+        }
+        with running(context) as port:
+            with self.post_endpoint(port, "/review", base) as response:
+                reviewed = json.loads(response.read())
+            with self.post_endpoint(
+                port,
+                "/action",
+                {**base, "review_token": reviewed["review_token"]},
+            ) as response:
+                completed = json.loads(response.read())
+        self.assertTrue(completed["ok"])
+        self.assertEqual(completed["results"][0]["mode"], "reviewed_trash")
+        self.assertEqual(called, [str(target.resolve())])
 
     def test_http_validates_full_batch_before_first_side_effect(self) -> None:
         first = self.make_cache("one")

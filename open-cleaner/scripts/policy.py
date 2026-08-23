@@ -11,10 +11,17 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional
 
 from contracts import ACTION_PLAN_SCHEMA_VERSION, canonical_sha256, validate_action_plan, validate_analysis
+from project_artifacts import (
+    ProjectArtifactError,
+    inspect_artifact_activity,
+    inspect_project_artifact,
+)
 from rules import RuleCatalog, RuleError, canonical_path, is_within, normalized_platform
+from runtime import RuntimeInspector
 
 PLAN_TTL_MINUTES = 30
 MAX_PLAN_ACTIONS = 200
+MUTATING_MODES = ("trash", "reviewed_trash")
 
 
 class PolicyError(ValueError):
@@ -72,6 +79,97 @@ def identities_match(
     return all(expected.get(key) == actual.get(key) for key in keys)
 
 
+def _windows_owner_matches_current_user(path: str) -> bool:
+    import ctypes
+    from ctypes import wintypes
+
+    advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    advapi32.GetNamedSecurityInfoW.argtypes = [
+        wintypes.LPWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(ctypes.c_void_p),
+    ]
+    advapi32.GetNamedSecurityInfoW.restype = wintypes.DWORD
+    advapi32.OpenProcessToken.argtypes = [
+        wintypes.HANDLE,
+        wintypes.DWORD,
+        ctypes.POINTER(wintypes.HANDLE),
+    ]
+    advapi32.OpenProcessToken.restype = wintypes.BOOL
+    advapi32.GetTokenInformation.argtypes = [
+        wintypes.HANDLE,
+        ctypes.c_int,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        ctypes.POINTER(wintypes.DWORD),
+    ]
+    advapi32.GetTokenInformation.restype = wintypes.BOOL
+    advapi32.EqualSid.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    advapi32.EqualSid.restype = wintypes.BOOL
+    kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.LocalFree.argtypes = [ctypes.c_void_p]
+
+    owner_sid = ctypes.c_void_p()
+    security_descriptor = ctypes.c_void_p()
+    token = wintypes.HANDLE()
+    token_buffer = None
+    try:
+        result = advapi32.GetNamedSecurityInfoW(
+            path,
+            1,
+            1,
+            ctypes.byref(owner_sid),
+            None,
+            None,
+            None,
+            ctypes.byref(security_descriptor),
+        )
+        if result != 0 or not owner_sid:
+            return False
+        if not advapi32.OpenProcessToken(
+            kernel32.GetCurrentProcess(), 0x0008, ctypes.byref(token)
+        ):
+            return False
+        required = wintypes.DWORD()
+        advapi32.GetTokenInformation(token, 1, None, 0, ctypes.byref(required))
+        if not required.value:
+            return False
+        token_buffer = ctypes.create_string_buffer(required.value)
+        if not advapi32.GetTokenInformation(
+            token,
+            1,
+            token_buffer,
+            required.value,
+            ctypes.byref(required),
+        ):
+            return False
+        token_user_sid = ctypes.cast(token_buffer, ctypes.POINTER(ctypes.c_void_p))[0]
+        return bool(advapi32.EqualSid(owner_sid, token_user_sid))
+    except (AttributeError, OSError):
+        return False
+    finally:
+        if token:
+            kernel32.CloseHandle(token)
+        if security_descriptor:
+            kernel32.LocalFree(security_descriptor)
+
+
+def owner_matches_current_user(path: str, platform: str) -> bool:
+    if platform == "win32":
+        return _windows_owner_matches_current_user(path)
+    try:
+        return int(os.lstat(path).st_uid) == int(os.getuid())
+    except (AttributeError, OSError):
+        return False
+
+
 class SafetyPolicy:
     def __init__(
         self,
@@ -79,6 +177,7 @@ class SafetyPolicy:
         platform: Optional[str] = None,
         environment: Optional[Mapping[str, str]] = None,
         catalog: Optional[RuleCatalog] = None,
+        runtime_inspector: Optional[RuntimeInspector] = None,
     ) -> None:
         self.platform = normalized_platform(platform)
         self.home_input = os.path.abspath(os.path.expanduser(home or "~"))
@@ -86,6 +185,7 @@ class SafetyPolicy:
         self.environment = dict(os.environ if environment is None else environment)
         self.environment["HOME"] = self.home
         self.catalog = catalog or RuleCatalog(self.platform, self.environment)
+        self.runtime_inspector = runtime_inspector or RuntimeInspector(self.platform)
 
     def _reject_user_symlink_components(self, original: str) -> None:
         if not is_within(original, self.home_input):
@@ -149,7 +249,7 @@ class SafetyPolicy:
     def _reject_protected(self, path: str, mode: str) -> None:
         if any(os.path.normcase(path) == os.path.normcase(root) for root in self._exact_protected_roots()):
             raise PolicyError("protected_root", f"拒绝整体操作受保护根目录：{path}")
-        if mode == "trash":
+        if mode in MUTATING_MODES:
             for root in self._sensitive_subtrees():
                 if is_within(path, root):
                     raise PolicyError("sensitive_data", f"拒绝操作敏感数据目录：{path}")
@@ -169,6 +269,75 @@ class SafetyPolicy:
         if not allowed:
             raise PolicyError("open_out_of_scope", f"打开路径超出允许范围：{path}")
 
+    def _review_roots(self) -> tuple[str, ...]:
+        roots = [os.path.join(self.home, "Downloads")]
+        if self.platform == "darwin":
+            roots.append("/private/tmp")
+            temp_root = self.environment.get("TMPDIR")
+            if temp_root:
+                roots.append(temp_root)
+        else:
+            temp_root = self.environment.get("TEMP")
+            if temp_root:
+                roots.append(temp_root)
+        resolved = []
+        for root in roots:
+            try:
+                resolved.append(canonical_path(root))
+            except RuleError:
+                continue
+        return tuple(dict.fromkeys(resolved))
+
+    def _authorize_reviewed_trash(self, target: str) -> dict[str, Any]:
+        direct_review = any(
+            os.path.normcase(os.path.dirname(target)) == os.path.normcase(root)
+            for root in self._review_roots()
+        )
+        if direct_review:
+            name = os.path.basename(target).casefold()
+            if name.startswith(".") or name in {
+                "application support",
+                "containers",
+                "group containers",
+                "documents",
+                "keychains",
+            }:
+                raise PolicyError("review_sensitive_name", "人工复核目标疑似敏感目录，已阻止处置")
+            authorization = {
+                "rule_id": "reviewed.user-item",
+                "recovery": "目标只会移入废纸篓，可在清空前恢复。",
+                "risk": "这是人工复核的数据项，可能包含唯一副本或仍需使用的内容。",
+                "non_targets": [
+                    "下载或临时目录根本身",
+                    "下载或临时目录的深层后代",
+                    "敏感目录、应用数据、容器数据、系统路径和符号链接",
+                ],
+            }
+        else:
+            if any(is_within(target, root, include_root=True) for root in self._review_roots()):
+                raise PolicyError(
+                    "review_scope_denied",
+                    "人工复核目标必须是下载或临时目录的当前用户直接子项",
+                )
+            try:
+                project = inspect_project_artifact(target, self.home, self.environment)
+            except ProjectArtifactError as exc:
+                raise PolicyError(exc.code, str(exc)) from exc
+            authorization = {
+                "rule_id": "reviewed.project-artifact",
+                "recovery": "项目源码和构建清单保持不变；目标可由项目工具重新生成。",
+                "risk": "下一次构建或测试会变慢，必要时需要重新下载依赖。",
+                "non_targets": [
+                    "项目源码、锁文件和配置",
+                    "Archives、发布包、签名产物和项目根目录",
+                    "node_modules、虚拟环境和共享依赖仓库",
+                ],
+                "project": project,
+            }
+        if not owner_matches_current_user(target, self.platform):
+            raise PolicyError("wrong_owner", "目标不属于当前用户，已阻止处置")
+        return authorization
+
     def authorize(
         self,
         path: str,
@@ -176,7 +345,7 @@ class SafetyPolicy:
         tier: str,
         requested_rule_id: Optional[str] = None,
     ) -> dict[str, Any]:
-        if mode not in ("open", "trash"):
+        if mode not in ("open", "trash", "reviewed_trash"):
             raise PolicyError("unsupported_mode", f"不支持的操作：{mode}")
         try:
             original = os.path.abspath(os.path.expanduser(path))
@@ -193,9 +362,9 @@ class SafetyPolicy:
         non_targets: list[str] = []
         if mode == "open":
             self._authorize_open(target)
-        else:
-            if tier not in ("green", "yellow"):
-                raise PolicyError("tier_denied", "只有绿灯或经规则验证的黄灯目标可以移到废纸篓")
+        elif mode == "trash":
+            if tier != "green":
+                raise PolicyError("tier_denied", "普通处置只允许确定性规则授权的绿灯目标")
             if not is_within(target, self.home, include_root=False):
                 raise PolicyError("trash_out_of_scope", "只允许处置用户主目录内的目标")
             rule = self.catalog.match(target, "trash", requested_rule_id)
@@ -205,7 +374,15 @@ class SafetyPolicy:
             recovery = rule.recovery
             risk = rule.risk
             non_targets = list(rule.non_targets)
-        return {
+        else:
+            if tier != "yellow":
+                raise PolicyError("tier_denied", "人工复核处置只允许黄灯目标")
+            reviewed = self._authorize_reviewed_trash(target)
+            rule_id = reviewed["rule_id"]
+            recovery = reviewed["recovery"]
+            risk = reviewed["risk"]
+            non_targets = reviewed["non_targets"]
+        result = {
             "mode": mode,
             "path": original,
             "canonical_path": target,
@@ -217,6 +394,22 @@ class SafetyPolicy:
             "identity": identity,
             "parent_identity": parent_identity,
         }
+        if mode in MUTATING_MODES:
+            runtime = self.runtime_inspector.inspect(target, rule_id)
+            if runtime:
+                if runtime["state"] == "active":
+                    raise PolicyError("owner_active", f"{runtime['owner_tool']['name']} 正在运行，已阻止处置")
+                if runtime["state"] == "unknown":
+                    raise PolicyError("runtime_unknown", "无法确认所有者工具是否正在运行，已阻止处置")
+                result["runtime"] = runtime
+            if rule_id == "macos.xcode-derived-data-entry" or os.path.basename(target) == "ms-playwright":
+                try:
+                    result["activity"] = inspect_artifact_activity(target, self.environment)
+                except ProjectArtifactError as exc:
+                    raise PolicyError(exc.code, str(exc)) from exc
+        if mode == "reviewed_trash" and rule_id == "reviewed.project-artifact":
+            result["project"] = reviewed["project"]
+        return result
 
     def revalidate(self, action: Mapping[str, Any]) -> None:
         target = canonical_path(str(action["path"]))
@@ -245,6 +438,8 @@ def _iter_requested_actions(analysis: Mapping[str, Any]) -> Iterable[tuple[str, 
             rule_id = item.get("rule_id")
             for path in item.get("trash_paths") or []:
                 yield "trash", str(path), tier, str(rule_id) if rule_id else None, name
+            for path in item.get("reviewed_trash_paths") or []:
+                yield "reviewed_trash", str(path), tier, None, name
             if tier == "yellow" and item.get("path"):
                 yield "open", str(item["path"]), tier, None, name
     for item in analysis.get("red", []):
@@ -260,11 +455,17 @@ def build_action_plan(
     environment: Optional[Mapping[str, str]] = None,
     now: Optional[datetime] = None,
     purpose: str = "dry-run",
+    runtime_inspector: Optional[RuntimeInspector] = None,
 ) -> dict[str, Any]:
     validate_analysis(analysis)
     if purpose not in ("dry-run", "session"):
         raise PolicyError("invalid_plan_purpose", "操作计划用途必须是 dry-run 或 session")
-    policy = SafetyPolicy(home=home, platform=platform, environment=environment)
+    policy = SafetyPolicy(
+        home=home,
+        platform=platform,
+        environment=environment,
+        runtime_inspector=runtime_inspector,
+    )
     try:
         analysis_home = canonical_path(str(analysis["system"]["home"]))
     except RuleError as exc:

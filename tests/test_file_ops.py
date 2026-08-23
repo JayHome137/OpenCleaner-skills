@@ -7,12 +7,19 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "open-cleaner" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-from file_ops import FileOperationError, FileOperator, OperationLog
+from file_ops import (
+    FileOperationError,
+    FileOperator,
+    OperationLog,
+    move_to_trash,
+    open_in_file_manager,
+)
 from policy import SafetyPolicy
 
 
@@ -85,6 +92,13 @@ class FileOperationTests(unittest.TestCase):
         entry = entries[-1]
         self.assertEqual(entry["status"], "failed")
         self.assertEqual(entry["error_code"], "operation_failed")
+
+    def test_windows_file_operation_entries_are_disabled(self) -> None:
+        with patch("file_ops.sys.platform", "win32"):
+            with self.assertRaisesRegex(FileOperationError, "仅支持 macOS"):
+                move_to_trash(str(self.target))
+            with self.assertRaisesRegex(FileOperationError, "仅支持 macOS"):
+                open_in_file_manager(str(self.target))
 
     def test_trash_success_without_source_disappearing_is_failed(self) -> None:
         log = OperationLog(self.root / "state")

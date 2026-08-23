@@ -1,20 +1,47 @@
 # OpenCleaner
 
-面向 Codex 和其他 AI Agent 的 macOS / Windows 存储分析 Skill：只读扫描磁盘占用，生成中文分级报告，并通过确定性规则提供受控、可恢复的文件处置。
+面向 Codex 和其他 AI Agent 的 macOS 存储分析 Skill：只读扫描磁盘占用，生成中文分级报告，并通过确定性规则提供受控、可恢复的文件处置。
 
 [![macOS 验证](https://github.com/JayHome137/OpenCleaner-skills/actions/workflows/macos-validation.yml/badge.svg)](https://github.com/JayHome137/OpenCleaner-skills/actions/workflows/macos-validation.yml)
-[![Windows 验证](https://github.com/JayHome137/OpenCleaner-skills/actions/workflows/windows-validation.yml/badge.svg)](https://github.com/JayHome137/OpenCleaner-skills/actions/workflows/windows-validation.yml)
 [![许可证](https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue.svg)](LICENSE)
 
 ## 核心能力
 
-- **跨平台分析**：支持 macOS 和 Windows，识别磁盘热点、大目录、开发缓存、离线内容和应用数据。
+- **macOS 存储分析**：识别磁盘热点、大目录、开发缓存、离线内容和应用数据。
 - **确定性分级**：规则引擎先生成绿、黄、红三级草稿，Agent 只能补充解释或提高风险，不能新增文件操作权限。
-- **中文可视化报告**：展示磁盘总览、Top 5、处置建议、权限遗漏、风险说明和长期建议。
-- **安全处置**：执行前经过 Dry Run、短期 action plan、路径与文件身份复核；只支持打开目录和移到废纸篓。
+- **中文交互报告**：展示磁盘总览、Top 5、处置建议、权限遗漏和风险说明；受控模式支持多选、批次确认、逐项结果和重新扫描。
+- **运行态保护**：识别常见开发工具、应用与容器工具的所有者关系；活动或状态未知时拒绝处置，只展示应用内或所有者工具建议。
+- **分级安全处置**：绿灯使用普通 Trash；下载或临时目录的黄灯直接子项必须经过独立人工复核、短时一次性令牌和更强确认。
+- **项目产物阶段**：按需发现 allowlist 内的构建/测试生成目录；只有项目清单、Git 状态、静置期和打开文件检查全部通过才进入黄灯复核。
 - **操作可审计**：记录操作结果、失败原因、目标复核和磁盘可用空间变化。
 
 OpenCleaner 不提供永久删除、系统目录自动清理、管理员权限操作、完整应用卸载、系统优化或实时硬件监控。
+
+## 当前功能
+
+| 能力 | 当前状态 |
+| --- | --- |
+| 只读扫描与覆盖率 | 可用：有限并发、超时、取消、去重、结构化权限与扫描错误。 |
+| 确定性绿黄红分级 | 可用：Agent 只能补充解释或提高风险，不能新增处置权限。 |
+| HTML 报告 | 可用：桌面与移动布局、Top 5、分级卡片、权限遗漏和长期建议。 |
+| 受控处置 | 可用：绿灯批量 Trash；受限黄灯经独立复核后 Trash；红灯只定位查看。 |
+| 运行态保护 | 可用：已知所有者工具为活动或未知状态时失败关闭，执行前再次检查。 |
+| 项目生成目录 | 可选：扫描受限项目根中的 allowlist 产物，Git 项目还必须明确 ignored 且不含 tracked 内容。 |
+| 操作审计与复扫 | 可用：逐项结果、本地历史、原路径复核、磁盘空间变化和真实重新扫描。 |
+| Windows / Linux | 关闭：当前所有公开扫描、分类、计划和文件操作入口只接受 macOS。 |
+
+## 与 Mole 的边界
+
+| 维度 | OpenCleaner | Mole |
+| --- | --- | --- |
+| 产品形态 | Codex Skill + 中文 HTML 报告 | 独立 CLI/TUI，另有原生 Mac 应用 |
+| 磁盘探索 | 预设热点扫描、Agent 解释、分级报告 | 任意目录探索、过滤、多选、Finder 预览 |
+| 交互处置 | action ID、服务端重验、短期令牌、Trash-only | `mo analyze` 确认后移入 Trash；其他清理命令可永久删除 |
+| 清理范围 | 确定性缓存、受限下载/临时直接子项，以及严格验证的项目生成目录 | 缓存、日志、临时文件、卸载残留、项目产物和安装包 |
+| 容器与虚拟机 | 识别并解释；活动或未知时拒绝，托管数据保持人工处理 | 清理可再生缓存；活动镜像和托管数据受保护或只供复核 |
+| 系统能力 | 不含 sudo、应用卸载、系统优化和实时监控 | 支持卸载、维护优化、系统监控、更新和 shell 集成 |
+
+OpenCleaner 借鉴 Mole 的安全理念和交互经验，但不依赖或复制 Mole 的 GPL 源码。Mole 当前能力以其主分支文档和实现为准。
 
 ## 快速开始
 
@@ -44,7 +71,17 @@ python3 scripts/validate_plan.py /tmp/storage-analysis.json > /tmp/storage-dry-r
 python3 scripts/server.py /tmp/storage-analysis.json
 ```
 
-本地服务绑定 `127.0.0.1` 的随机端口，并使用随机 token。浏览器只提交 action ID，不提交路径或操作类型。
+本地服务绑定 `127.0.0.1` 的随机端口，并使用随机 token。浏览器只提交 action ID；黄灯复核额外提交服务端签发的一次性令牌，不提交路径或操作类型。
+
+项目开发阶段已经完成测试/构建、源码已有可恢复检查点且相关进程已退出时，可以改用项目阶段分析：
+
+```bash
+python3 scripts/project_stage.py > /tmp/open-cleaner-project-stage.json
+python3 scripts/validate_plan.py /tmp/open-cleaner-project-stage.json > /tmp/open-cleaner-project-stage-plan.json
+python3 scripts/server.py /tmp/open-cleaner-project-stage.json
+```
+
+该阶段最多展示 200 个大于阈值的 allowlist 生成目录。源码、锁文件、`node_modules`、虚拟环境、归档、签名产物和发布包不会进入处置计划。
 
 只需要可分享的只读报告时：
 
@@ -58,8 +95,10 @@ python3 scripts/build_report.py /tmp/storage-analysis.json ~/Desktop/storage-rep
 - Agent 不能把未知路径提升为可执行目标。
 - Dry Run 不可执行；受控操作由服务端重新生成 30 分钟有效的 session plan。
 - 执行前重新检查真实路径、文件身份、父目录、符号链接、保护目录和匹配规则。
+- 已知所有者工具的运行状态必须是 `inactive`；`active` 或 `unknown` 都会失败关闭，执行前再次检查。
 - Trash 失败即停止，不回退到 `rm`、`os.remove` 或其他永久删除方式。
 - 批量操作在第一个副作用前完成全部目标复核，已完成的 Trash 动作不能重放。
+- 普通 `trash` 仅限绿灯；`reviewed_trash` 仅限黄灯下载/临时直接子项或严格验证的项目生成目录。复核令牌有效 120 秒、只用一次，且与计划和完整 action ID 集绑定。
 - Trash 返回成功后仍会确认原路径已经移走，并写入本地操作日志。
 
 ## 工作原理
@@ -71,9 +110,10 @@ python3 scripts/build_report.py /tmp/storage-analysis.json ~/Desktop/storage-rep
   -> Agent 补充语义解释
   -> 不可执行 Dry Run
   -> 短期 session action plan
-  -> 中文报告与用户确认
+  -> HTML 多选、批次确认与运行态提示
+  -> 黄灯独立复核令牌（仅适用受限目标）
   -> 打开目录或移到废纸篓
-  -> 操作日志与结果复核
+  -> 操作日志、逐项结果与重新扫描
 ```
 
 数据契约位于 [`open-cleaner/schemas/`](open-cleaner/schemas/)，安全规则位于 [`open-cleaner/rules/`](open-cleaner/rules/)。扫描、策略、报告和执行模块保持单向职责，报告不能绕过服务端授权。
@@ -82,11 +122,11 @@ python3 scripts/build_report.py /tmp/storage-analysis.json ~/Desktop/storage-rep
 
 | 平台 | 状态 | 说明 |
 | --- | --- | --- |
-| macOS | 已验证 | 扫描、规则、报告、安全回归和临时 fixture Trash smoke 已在本地及 GitHub runner 通过。 |
-| Windows | 已验证 | 扫描、分类、计划、报告和 Recycle Bin smoke 已在 GitHub `windows-latest` runner 通过。 |
+| macOS | 已验证 | 当前工作树的扫描、规则、报告、安全回归和临时 fixture Trash smoke 已在本地通过；既有版本曾通过 GitHub runner。 |
+| Windows | 当前关闭 | 实验实现和 smoke 测试保留，公开扫描、分类、计划与文件操作入口均失败关闭，待独立测试后再决定恢复。 |
 | Linux | 不支持 | 扫描器和文件操作明确拒绝。 |
 
-运行时只依赖 Python 3 标准库和系统自带文件管理能力。Windows 环境需要预先安装 Python 3。
+运行时只依赖 Python 3 标准库和 macOS 系统自带文件管理能力。
 
 ## 验证
 

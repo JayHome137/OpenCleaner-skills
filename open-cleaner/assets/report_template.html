@@ -117,7 +117,7 @@
   .system-grid > div { min-width: 0; overflow-wrap: anywhere; }
   .system-grid b { color: var(--muted); font-weight: 500; }
 
-  .table-frame { overflow-x: auto; }
+  .table-frame { width: 100%; min-width: 0; max-width: 100%; overflow: auto; contain: inline-size; clip-path: inset(0); }
   table { width: 100%; min-width: 730px; border-collapse: collapse; }
   th, td { padding: 11px 12px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
   th { color: var(--muted); background: #fafbfc; font-size: 12px; white-space: nowrap; }
@@ -192,21 +192,83 @@
   .action-button { min-height: 34px; padding: 6px 12px; border: 1px solid transparent; border-radius: 6px; cursor: pointer; font-weight: 650; }
   .action-button.trash { background: var(--blue-soft); color: var(--blue); }
   .action-button.open { background: #eef0f3; color: var(--text); }
+  .action-button.primary { background: var(--blue); color: #fff; }
+  .action-button.secondary { border-color: var(--border); background: #fff; color: var(--text); }
   .action-button:hover { filter: brightness(.97); }
   .action-button:disabled { cursor: default; opacity: .5; }
   .action-state { min-width: 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+  .runtime-state { display: flex; align-items: center; gap: 7px; margin-top: 8px; color: var(--muted); font-size: 12px; }
+  .runtime-dot { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: var(--muted); }
+  .runtime-state.inactive .runtime-dot { background: var(--green); }
+  .runtime-state.active .runtime-dot, .runtime-state.unknown .runtime-dot { background: var(--red); }
   .action-state.ok { color: var(--green); font-weight: 700; }
   .action-state.error { color: var(--red); }
   .action-help { margin-top: 6px; color: var(--muted); font-size: 12px; }
   .finding.completed { opacity: .72; }
   .finding.completed .finding-name { text-decoration: line-through; }
-  .permission-note { padding: 12px 14px; border: 1px solid #f0c36d; border-radius: 8px; background: var(--amber-soft); color: #7a4300; }
+  .permission-note { padding: 12px 14px; border: 1px solid #f0c36d; border-radius: 8px; background: var(--amber-soft); color: #7a4300; overflow-wrap: anywhere; }
   .history-list { display: grid; gap: 8px; }
   .history-entry { padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; background: #fafbfc; }
   .history-entry.ok { border-left: 3px solid var(--green); }
   .history-entry.error { border-left: 3px solid var(--red); }
   .history-meta { color: var(--muted); font-size: 12px; }
   .history-path { margin-top: 3px; font: 12px/1.5 ui-monospace, "SFMono-Regular", Consolas, monospace; overflow-wrap: anywhere; }
+  .session-bar { display: flex; align-items: center; gap: 10px; margin: 12px 0 0; padding: 10px 12px; }
+  .session-copy { min-width: 0; flex: 1; }
+  .session-title { font-weight: 700; }
+  .session-detail { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+  .select-row { display: flex; align-items: flex-start; gap: 9px; margin: 10px 0 0; }
+  .select-row input { width: 17px; height: 17px; margin: 2px 0 0; accent-color: var(--blue); }
+  .select-row label { cursor: pointer; font-weight: 650; }
+  .batch-bar {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    left: 18px;
+    z-index: 20;
+    display: none;
+    width: min(760px, calc(100% - 36px));
+    min-height: 58px;
+    margin: 0 auto;
+    padding: 10px 12px;
+    align-items: center;
+    gap: 12px;
+    border: 1px solid #cfd6df;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, .98);
+    box-shadow: 0 12px 36px rgba(16, 24, 40, .2);
+  }
+  .batch-bar.visible { display: flex; }
+  .batch-summary { min-width: 0; flex: 1; }
+  .batch-summary b { display: block; }
+  .batch-summary span { color: var(--muted); font-size: 12px; }
+  .batch-actions { display: flex; gap: 8px; }
+  dialog {
+    width: min(620px, calc(100% - 28px));
+    max-height: min(760px, calc(100vh - 40px));
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: 0 24px 64px rgba(16, 24, 40, .26);
+  }
+  dialog::backdrop { background: rgba(22, 27, 34, .48); }
+  .confirm-head { padding: 18px 20px 12px; border-bottom: 1px solid var(--border); }
+  .confirm-head h2 { margin: 0; font-size: 18px; }
+  .confirm-head p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+  .confirm-body { max-height: 480px; padding: 14px 20px; overflow-y: auto; }
+  .confirm-list { display: grid; gap: 7px; margin: 10px 0 0; }
+  .confirm-item { padding: 9px 10px; border: 1px solid var(--border); border-radius: 6px; background: #fafbfc; }
+  .confirm-item b { display: block; overflow-wrap: anywhere; }
+  .confirm-item span { display: block; color: var(--muted); font: 11px/1.45 ui-monospace, "SFMono-Regular", Consolas, monospace; overflow-wrap: anywhere; }
+  .confirm-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px 16px; border-top: 1px solid var(--border); }
+  .batch-progress { margin-top: 12px; color: var(--muted); font-size: 12px; }
+  .batch-progress.error { color: var(--red); }
+  .review-ack { display: none; align-items: flex-start; gap: 9px; margin-top: 14px; padding: 10px; border: 1px solid #e5b954; border-radius: 6px; background: var(--yellow-soft); }
+  .review-ack.visible { display: flex; }
+  .review-ack input { width: 17px; height: 17px; margin: 2px 0 0; accent-color: var(--yellow); }
   footer { margin-top: 36px; color: var(--muted); text-align: center; font-size: 12px; }
 
   @media (max-width: 640px) {
@@ -217,6 +279,14 @@
     .metric { min-width: 0; }
     .metric-value { font-size: 16px; overflow-wrap: anywhere; }
     .system-grid { grid-template-columns: 1fr; }
+    table { min-width: 0; table-layout: fixed; }
+    th:nth-child(1), td:nth-child(1) { width: 34px; }
+    th:nth-child(2), td:nth-child(2) { width: 34px; }
+    th:nth-child(3), td:nth-child(3) { width: 82px; }
+    th:nth-child(4), td:nth-child(4),
+    th:nth-child(6), td:nth-child(6),
+    th:nth-child(7), td:nth-child(7) { display: none; }
+    td:nth-child(5) b { overflow-wrap: anywhere; }
     .block-title { align-items: flex-start; flex-wrap: wrap; font-size: 17px; }
     .block-tools { width: 100%; margin-left: 0; }
     .finding-toggle { grid-template-columns: 10px minmax(0, 1fr) 16px; }
@@ -225,6 +295,10 @@
     .finding-body { padding-left: 16px; }
     .disk-row { grid-template-columns: 44px 1fr; }
     .disk-value { grid-column: 2; }
+    .session-bar, .batch-bar { align-items: stretch; flex-direction: column; }
+    .session-bar .action-button, .batch-actions, .batch-actions .action-button { width: 100%; }
+    .batch-actions { display: grid; grid-template-columns: 1fr 1fr; }
+    .confirm-actions { display: grid; grid-template-columns: 1fr 1fr; }
   }
 </style>
 </head>
@@ -237,6 +311,15 @@
   <div id="report-content"></div>
   <footer>open-cleaner · 扫描只读 · 文件操作需策略授权和确认</footer>
 </main>
+<div class="batch-bar" id="batch-bar" aria-live="polite">
+  <div class="batch-summary"><b id="batch-title"></b><span id="batch-detail"></span></div>
+  <div class="batch-actions"><button class="action-button secondary" id="batch-clear" type="button">取消选择</button><button class="action-button primary" id="batch-submit" type="button">移入废纸篓</button></div>
+</div>
+<dialog id="confirm-dialog">
+  <div class="confirm-head"><h2>确认移入废纸篓</h2><p id="confirm-summary"></p></div>
+  <div class="confirm-body"><div id="confirm-policy">服务端将在执行前重新验证整批目标的规则、路径、运行状态、文件身份和父目录。</div><div class="confirm-list" id="confirm-list"></div><label class="review-ack" id="review-ack"><input id="review-ack-input" type="checkbox"><span>我已逐项核对这些黄灯目标，确认它们不是唯一副本、活动项目、应用数据或仍在使用的临时内容。</span></label><div class="batch-progress" id="confirm-progress" aria-live="polite"></div></div>
+  <div class="confirm-actions"><button class="action-button secondary" id="confirm-cancel" type="button">取消</button><button class="action-button primary" id="confirm-submit" type="button">确认移入废纸篓</button></div>
+</dialog>
 
 <script>
 "use strict";
@@ -282,11 +365,61 @@ function actionIndex() {
   return index;
 }
 const ACTION_INDEX = actionIndex();
+const ACTIONS = new Map((SESSION && SESSION.actions || []).map(action => [action.action_id, action]));
+const SELECTED = new Set();
+let PENDING_ACTIONS = [];
 
 function idsFor(paths, mode) {
   const ids = [];
   for (const path of (paths || [])) ids.push(...(ACTION_INDEX.get(`${mode}\n${path}`) || []));
   return [...new Set(ids)];
+}
+
+function reportItemForAction(action) {
+  const items = [...(REPORT.green || []), ...(REPORT.yellow || []), ...(REPORT.red || [])];
+  return items.find(item => item.path === action.path || (item.trash_paths || []).includes(action.path) || (item.reviewed_trash_paths || []).includes(action.path)) || {};
+}
+
+function runtimeForItem(item) {
+  if (!SESSION) return item.runtime || null;
+  const pathSet = new Set([item.path, ...(item.trash_paths || []), ...(item.reviewed_trash_paths || [])]);
+  const action = (SESSION.actions || []).find(candidate => pathSet.has(candidate.path) && candidate.runtime);
+  if (action) return action.runtime;
+  const rejected = (SESSION.rejected || []).find(candidate =>
+    pathSet.has(candidate.path) && ["owner_active", "runtime_unknown"].includes(candidate.code)
+  );
+  if (rejected && item.runtime) {
+    return {...item.runtime, state: rejected.code === "owner_active" ? "active" : "unknown"};
+  }
+  return item.runtime || null;
+}
+
+function runtimePanel(item) {
+  const runtime = runtimeForItem(item);
+  if (!runtime) return "";
+  const state = runtime.state || "analysis";
+  const labels = {inactive: "未发现活动进程", active: "所有者工具正在运行，处置已禁用", unknown: "无法确认进程状态，处置已禁用", analysis: "将在受控会话中检查运行状态"};
+  const tool = runtime.owner_tool || {};
+  const commands = [tool.inspect_command, tool.cleanup_command].filter(Boolean);
+  const commandText = commands.length
+    ? `<div class="command-list">${commands.map(command => `<code>${h(command)}</code>`).join("")}</div>`
+    : "";
+  return `<div class="detail"><div class="detail-title">所有者工具：${h(tool.name || runtime.id)}</div><div class="runtime-state ${h(state)}"><span class="runtime-dot"></span><span>${h(labels[state] || labels.analysis)}</span></div>${commandText}<div class="action-help">命令仅供复核，OpenCleaner 不会代为执行。</div></div>`;
+}
+
+function selectedActions() {
+  return [...SELECTED].map(id => ACTIONS.get(id)).filter(Boolean);
+}
+
+function sessionSection() {
+  if (!SESSION) return "";
+  const trashCount = (SESSION.actions || []).filter(action => action.mode === "trash").length;
+  const reviewedCount = (SESSION.actions || []).filter(action => action.mode === "reviewed_trash").length;
+  const expires = SESSION.expires_at ? new Date(SESSION.expires_at).toLocaleString() : "未知";
+  const rescan = SESSION.rescan_endpoint
+    ? `<button class="action-button secondary" type="button" id="rescan-button">重新扫描</button>`
+    : "";
+  return `<section class="block surface session-bar"><div class="session-copy"><div class="session-title">受控清理会话</div><div class="session-detail">${trashCount} 个绿灯目标可处置${reviewedCount ? ` · ${reviewedCount} 个黄灯目标可人工复核` : ""} · 会话有效至 ${h(expires)}</div></div>${rescan}</section>`;
 }
 
 function segments(system, summary) {
@@ -362,17 +495,31 @@ function actionButton(label, mode, ids) {
   return `<button class="action-button ${h(mode)}" type="button" data-mode="${h(mode)}" data-action-ids="${h(ids.join(","))}">${h(label)}</button>`;
 }
 
+function selectionControl(item, tier) {
+  if (!SESSION || !["green", "yellow"].includes(tier)) return "";
+  const mode = tier === "green" ? "trash" : "reviewed_trash";
+  const paths = tier === "green" ? (item.trash_paths || []) : (item.reviewed_trash_paths || []);
+  const ids = idsFor(paths, mode);
+  if (!ids.length) return "";
+  const controlId = `select-${h(ids[0])}`;
+  const label = mode === "trash" ? "加入本次清理选择" : "加入黄灯人工复核";
+  return `<div class="select-row"><input class="action-select" id="${controlId}" type="checkbox" data-mode="${mode}" data-action-ids="${h(ids.join(","))}"><label for="${controlId}">${label}</label></div>`;
+}
+
 function actionPanel(item, tier) {
   if (!SESSION) return "";
   const trashIds = idsFor(item.trash_paths || [], "trash");
+  const reviewedIds = idsFor(item.reviewed_trash_paths || [], "reviewed_trash");
   const openPaths = tier === "red" ? (item.app_paths || []) : (item.path ? [item.path] : []);
   const openIds = idsFor(openPaths, "open");
-  if (!trashIds.length && !openIds.length) return "";
+  const runtime = runtimePanel(item);
+  if (!trashIds.length && !reviewedIds.length && !openIds.length) return runtime;
   const buttons = [
     actionButton(`在${managerName}中打开`, "open", openIds),
-    actionButton(trashIds.length > 1 ? `移到废纸篓（${trashIds.length} 项）` : "移到废纸篓", "trash", trashIds)
+    actionButton(trashIds.length > 1 ? `移到废纸篓（${trashIds.length} 项）` : "移到废纸篓", "trash", trashIds),
+    actionButton(reviewedIds.length > 1 ? `人工复核后移到废纸篓（${reviewedIds.length} 项）` : "人工复核后移到废纸篓", "reviewed_trash", reviewedIds)
   ].join("");
-  return `<div class="detail action-panel"><div class="detail-title">受控操作</div><div class="action-row">${buttons}<span class="action-state" aria-live="polite"></span></div><div class="action-help">页面只提交短期操作 ID；服务端会重新验证规则、真实路径和文件身份。移到废纸篓可恢复，清空后才释放空间。</div></div>`;
+  return `${runtime}<div class="detail action-panel"><div class="detail-title">受控操作</div><div class="action-row">${buttons}<span class="action-state" aria-live="polite"></span></div><div class="action-help">页面只提交短期操作 ID；服务端会重新验证规则、真实路径、运行状态和文件身份。移到废纸篓可恢复，清空后才释放空间。</div></div>${selectionControl(item, tier)}`;
 }
 
 function findingBody(item, tier) {
@@ -403,7 +550,10 @@ function findingsSection(title, items, tier) {
   let batch = "";
   if (tier === "green" && SESSION) {
     const ids = [...new Set(items.flatMap(item => idsFor(item.trash_paths || [], "trash")))];
-    if (ids.length) batch = `<span class="block-tools">${actionButton(`全部移到废纸篓（${ids.length} 项）`, "trash", ids)}<span class="action-state" aria-live="polite"></span></span>`;
+    if (ids.length) batch = `<span class="block-tools"><button class="action-button secondary select-all" type="button" data-action-ids="${h(ids.join(","))}">全选可清理项</button></span>`;
+  } else if (tier === "yellow" && SESSION) {
+    const ids = [...new Set(items.flatMap(item => idsFor(item.reviewed_trash_paths || [], "reviewed_trash")))];
+    if (ids.length) batch = `<span class="block-tools"><button class="action-button secondary select-all" type="button" data-action-ids="${h(ids.join(","))}">选择可复核项</button></span>`;
   }
   return `<section class="block"><h2 class="block-title">${h(title)} <span class="block-count">${items.length} 项</span>${batch}</h2>${items.map(item => finding(item, tier)).join("")}</section>`;
 }
@@ -429,62 +579,182 @@ function appendHistory(results, fallbackError) {
   for (const item of entries) {
     const ok = item.status === "completed";
     const delta = item.disk_free_delta_bytes == null ? "" : ` · 磁盘可用空间变化 ${bytesLabel(item.disk_free_delta_bytes)}`;
-    const verified = item.mode === "trash" ? ` · 原路径复核 ${item.target_exists_after === false ? "已移走" : "未通过"}` : "";
+    const verified = ["trash", "reviewed_trash"].includes(item.mode) ? ` · 原路径复核 ${item.target_exists_after === false ? "已移走" : "未通过"}` : "";
     list.insertAdjacentHTML("afterbegin", `<div class="history-entry ${ok ? "ok" : "error"}"><b>${ok ? "完成" : "失败"} · ${h(item.mode || "request")}</b><div class="history-meta">${h(item.timestamp || "")}${item.rule_id ? ` · ${h(item.rule_id)}` : ""}${h(delta)}${h(verified)}</div>${item.path ? `<div class="history-path">${h(item.path)}</div>` : ""}${item.error ? `<div class="action-state error">${h(item.error)}</div>` : ""}</div>`);
   }
   section.hidden = false;
 }
 
-async function runActions(button) {
-  const panel = button.closest(".action-panel, .block-tools");
-  const state = panel.querySelector(".action-state");
-  const ids = button.dataset.actionIds.split(",").filter(Boolean);
-  const mode = button.dataset.mode;
-  const message = mode === "trash"
-    ? `确认将 ${ids.length} 个已授权目标移到废纸篓？操作可恢复。`
-    : `确认在${managerName}中打开 ${ids.length} 个目标？`;
-  if (!window.confirm(message)) return;
-  const buttons = panel.querySelectorAll(".action-button");
-  buttons.forEach(item => { item.disabled = true; });
-  state.textContent = "处理中…";
-  state.className = "action-state";
-  try {
-    const response = await fetch(SESSION.endpoint, {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({token: SESSION.token, plan_id: SESSION.plan_id, action_ids: ids})
+function updateBatchBar() {
+  const actions = selectedActions();
+  const bar = document.getElementById("batch-bar");
+  bar.classList.toggle("visible", actions.length > 0);
+  if (!actions.length) return;
+  const estimate = actions.reduce((sum, action) => {
+    const item = reportItemForAction(action);
+    return sum + sizeInGb(item.size_estimate || item.size || "");
+  }, 0);
+  document.getElementById("batch-title").textContent = `已选择 ${actions.length} 项`;
+  const reviewed = actions[0] && actions[0].mode === "reviewed_trash";
+  document.getElementById("batch-submit").textContent = reviewed ? "进入人工复核" : "移入废纸篓";
+  document.getElementById("batch-detail").textContent = estimate > 0
+    ? `报告估算约 ${estimate.toFixed(1)} GB，实际释放量以重新扫描为准`
+    : "实际释放量以重新扫描为准";
+}
+
+function setSelected(ids, checked) {
+  if (checked) {
+    const incoming = ids.map(id => ACTIONS.get(id)).filter(Boolean);
+    const current = selectedActions();
+    if (current.length && incoming.length && current[0].mode !== incoming[0].mode) SELECTED.clear();
+  }
+  for (const id of ids) checked ? SELECTED.add(id) : SELECTED.delete(id);
+  document.querySelectorAll(".action-select").forEach(input => {
+    const inputIds = input.dataset.actionIds.split(",").filter(Boolean);
+    input.checked = inputIds.length > 0 && inputIds.every(id => SELECTED.has(id));
+  });
+  updateBatchBar();
+}
+
+function openConfirmation(ids) {
+  const requested = ids.map(id => ACTIONS.get(id)).filter(Boolean);
+  if (!requested.length || requested.some(action => action.mode !== requested[0].mode) || !["trash", "reviewed_trash"].includes(requested[0].mode)) return;
+  PENDING_ACTIONS = requested;
+  if (!PENDING_ACTIONS.length) return;
+  const reviewed = PENDING_ACTIONS[0].mode === "reviewed_trash";
+  const estimate = PENDING_ACTIONS.reduce((sum, action) => {
+    const item = reportItemForAction(action);
+    return sum + sizeInGb(item.size_estimate || item.size || "");
+  }, 0);
+  document.getElementById("confirm-summary").textContent = `${PENDING_ACTIONS.length} 个目标${estimate > 0 ? ` · 报告估算约 ${estimate.toFixed(1)} GB` : ""} · 操作可恢复`;
+  document.querySelector("#confirm-dialog h2").textContent = reviewed ? "确认黄灯人工复核" : "确认移入废纸篓";
+  document.getElementById("confirm-policy").textContent = reviewed
+    ? "服务端将先重新验证整批黄灯目标，再签发与本计划和所选 ID 精确绑定的一次性短时令牌。"
+    : "服务端将在执行前重新验证整批目标的规则、路径、运行状态、文件身份和父目录。";
+  document.getElementById("confirm-list").innerHTML = PENDING_ACTIONS.map(action => {
+    const item = reportItemForAction(action);
+    return `<div class="confirm-item" data-confirm-action="${h(action.action_id)}"><b>${h(item.name || action.path)}</b><span>${h(action.path)}</span></div>`;
+  }).join("");
+  const progress = document.getElementById("confirm-progress");
+  progress.textContent = "";
+  progress.className = "batch-progress";
+  const ack = document.getElementById("review-ack");
+  const ackInput = document.getElementById("review-ack-input");
+  ack.classList.toggle("visible", reviewed);
+  ackInput.checked = false;
+  document.getElementById("confirm-submit").textContent = reviewed ? "签发令牌并移入废纸篓" : "确认移入废纸篓";
+  document.getElementById("confirm-submit").disabled = reviewed;
+  document.getElementById("confirm-cancel").disabled = false;
+  document.getElementById("confirm-dialog").showModal();
+}
+
+function markCompleted(results) {
+  for (const result of (results || [])) {
+    if (result.status !== "completed" || !["trash", "reviewed_trash"].includes(result.mode)) continue;
+    const input = [...document.querySelectorAll(".action-select")].find(control =>
+      control.dataset.actionIds.split(",").filter(Boolean).includes(result.action_id)
+    );
+    const card = input && input.closest(".finding");
+    if (card) card.classList.add("completed");
+    document.querySelectorAll(`[data-action-ids]`).forEach(control => {
+      const ids = control.dataset.actionIds.split(",").filter(Boolean);
+      if (ids.includes(result.action_id)) control.disabled = true;
     });
-    const result = await response.json();
+    SELECTED.delete(result.action_id);
+  }
+  updateBatchBar();
+}
+
+async function postJson(endpoint, payload) {
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(payload)
+  });
+  let result = {};
+  try { result = await response.json(); } catch (_error) { result = {}; }
+  if (!response.ok || !result.ok) throw new Error(result.error || `请求失败（${response.status}）`);
+  return result;
+}
+
+async function executeActions(ids, mode, state, reviewToken = "") {
+  if (!ids.length) return;
+  if (state) {
+    state.textContent = mode === "open" ? `正在${managerName}中打开…` : "正在整批复核并移入废纸篓…";
+    state.className = "action-state";
+  }
+  try {
+    const payload = {token: SESSION.token, plan_id: SESSION.plan_id, action_ids: ids};
+    if (reviewToken) payload.review_token = reviewToken;
+    const result = await postJson(SESSION.endpoint, payload);
     appendHistory(result.results || [], result.error);
-    if (!response.ok || !result.ok) throw new Error(result.error || `请求失败（${response.status}）`);
-    if (mode === "trash") {
+    if (["trash", "reviewed_trash"].includes(mode)) {
       const delta = (result.results || []).reduce((sum, item) => sum + Number(item.disk_free_delta_bytes || 0), 0);
       const verified = (result.results || []).every(item => item.target_exists_after === false);
-      state.textContent = verified
+      if (state) state.textContent = verified
         ? `已复核移到废纸篓；磁盘可用空间变化 ${bytesLabel(delta)}，清空废纸篓后才释放内容占用`
         : "操作完成，但缺少原路径复核结果";
+      markCompleted(result.results || []);
     } else {
-      state.textContent = `已在${managerName}中打开`;
+      if (state) state.textContent = `已在${managerName}中打开`;
     }
-    state.className = "action-state ok";
-    if (mode === "trash") {
-      button.remove();
-      const card = panel.closest(".finding");
-      if (card) card.classList.add("completed");
-    }
+    if (state) state.className = "action-state ok";
+    return result;
   } catch (error) {
     if (!document.querySelector("#operation-history .history-entry")) appendHistory([], error && error.message ? error.message : String(error));
-    state.textContent = `操作失败：${error && error.message ? error.message : error}`;
-    state.className = "action-state error";
-  } finally {
-    buttons.forEach(item => { if (item.isConnected) item.disabled = false; });
+    if (state) {
+      state.textContent = `操作失败：${error && error.message ? error.message : error}`;
+      state.className = "action-state error";
+    }
+    throw error;
+  }
+}
+
+async function confirmPending() {
+  const submit = document.getElementById("confirm-submit");
+  const progress = document.getElementById("confirm-progress");
+  submit.disabled = true;
+  document.getElementById("confirm-cancel").disabled = true;
+  progress.textContent = "正在整批复核目标，任何一项失效都会在首次副作用前停止…";
+  try {
+    const ids = PENDING_ACTIONS.map(action => action.action_id);
+    const mode = PENDING_ACTIONS[0].mode;
+    let reviewToken = "";
+    if (mode === "reviewed_trash") {
+      const review = await postJson(SESSION.review_endpoint, {token: SESSION.token, plan_id: SESSION.plan_id, action_ids: ids});
+      reviewToken = review.review_token;
+      progress.textContent = "短时一次性复核令牌已签发，正在执行最终重验…";
+    }
+    const result = await executeActions(ids, mode, progress, reviewToken);
+    progress.textContent = `已完成 ${result.results.length} 项；操作结果已写入本次历史。`;
+    window.setTimeout(() => document.getElementById("confirm-dialog").close(), 900);
+  } catch (error) {
+    progress.textContent = `操作失败：${error && error.message ? error.message : error}`;
+    progress.className = "batch-progress error";
+    submit.disabled = PENDING_ACTIONS[0] && PENDING_ACTIONS[0].mode === "reviewed_trash" && !document.getElementById("review-ack-input").checked;
+    document.getElementById("confirm-cancel").disabled = false;
+  }
+}
+
+async function rescanReport() {
+  const button = document.getElementById("rescan-button");
+  if (!button || !SESSION.rescan_endpoint) return;
+  button.disabled = true;
+  button.textContent = "正在重新扫描…";
+  try {
+    await postJson(SESSION.rescan_endpoint, {token: SESSION.token, plan_id: SESSION.plan_id});
+    window.location.reload();
+  } catch (error) {
+    button.textContent = `扫描失败：${error && error.message ? error.message : error}`;
+    button.disabled = false;
   }
 }
 
 function mount() {
   document.getElementById("report-meta").textContent = `生成于 ${REPORT.generated_at || "未知"} · 扫描耗时 ${REPORT.scan_seconds == null ? "未知" : REPORT.scan_seconds + "s"} · ${SESSION ? "受控操作模式" : "静态只读模式"}`;
   const summary = REPORT.summary || {};
-  document.getElementById("report-content").innerHTML = overview(REPORT.system || {}, summary)
+  document.getElementById("report-content").innerHTML = sessionSection()
+    + overview(REPORT.system || {}, summary)
     + topFive(REPORT.top5)
     + listBlock("执行建议", Array.isArray(summary.priority) ? summary.priority : [], summary.overview)
     + findingsSection("可自动清理（纯缓存 / 临时文件，可再生）", REPORT.green, "green")
@@ -504,7 +774,16 @@ document.addEventListener("click", event => {
     return;
   }
   const action = event.target.closest(".action-button");
-  if (action) { runActions(action); return; }
+  if (action && action.dataset.actionIds && action.dataset.mode) {
+    const ids = action.dataset.actionIds.split(",").filter(Boolean);
+    const panel = action.closest(".action-panel");
+    const state = panel && panel.querySelector(".action-state");
+    if (action.dataset.mode === "open") executeActions(ids, "open", state).catch(() => {});
+    else openConfirmation(ids);
+    return;
+  }
+  const selectAll = event.target.closest(".select-all");
+  if (selectAll) { setSelected(selectAll.dataset.actionIds.split(",").filter(Boolean), true); return; }
   const copy = event.target.closest(".copy-command");
   if (copy) {
     event.stopPropagation();
@@ -515,6 +794,21 @@ document.addEventListener("click", event => {
     });
   }
 });
+
+document.addEventListener("change", event => {
+  const input = event.target.closest(".action-select");
+  if (!input) return;
+  setSelected(input.dataset.actionIds.split(",").filter(Boolean), input.checked);
+});
+
+document.getElementById("batch-clear").addEventListener("click", () => setSelected([...SELECTED], false));
+document.getElementById("batch-submit").addEventListener("click", () => openConfirmation([...SELECTED]));
+document.getElementById("confirm-cancel").addEventListener("click", () => document.getElementById("confirm-dialog").close());
+document.getElementById("confirm-submit").addEventListener("click", confirmPending);
+document.getElementById("review-ack-input").addEventListener("change", event => {
+  document.getElementById("confirm-submit").disabled = !event.target.checked;
+});
+document.addEventListener("click", event => { if (event.target.id === "rescan-button") rescanReport(); });
 
 mount();
 </script>

@@ -17,6 +17,11 @@ class ClassificationTests(unittest.TestCase):
     def test_unknown_platform_is_rejected_instead_of_assumed_macos(self) -> None:
         with self.assertRaises(ContractError):
             platform_from_scan({"system": {"os": "Linux"}})
+
+    def test_windows_analysis_entry_is_disabled(self) -> None:
+        with self.assertRaisesRegex(ContractError, "仅支持 macOS"):
+            platform_from_scan({"system": {"os": "Windows 11"}})
+
     def test_rules_produce_green_and_unknown_data_stays_yellow(self) -> None:
         with tempfile.TemporaryDirectory(prefix="storage-classify-") as temp:
             home = Path(temp) / "home"

@@ -21,15 +21,14 @@ from contracts import (  # noqa: E402
     validate_scan_result,
 )
 from rules import RuleCatalog, RuleError, canonical_path  # noqa: E402
+from runtime import owner_profile  # noqa: E402
 
 
 def platform_from_scan(scan: Mapping[str, Any]) -> str:
     os_name = str(scan["system"].get("os", "")).lower()
-    if "windows" in os_name:
-        return "win32"
     if "macos" in os_name or "mac os" in os_name:
         return "darwin"
-    raise ContractError(f"analysis 不支持该平台：{scan['system'].get('os', '')}")
+    raise ContractError(f"analysis 当前仅支持 macOS：{scan['system'].get('os', '')}")
 
 
 def format_gb(size_kb: int) -> str:
@@ -77,7 +76,7 @@ def flatten_unique(scan: Mapping[str, Any]) -> list[dict[str, Any]]:
 
 
 def make_green(item: Mapping[str, Any], rule: Any) -> dict[str, Any]:
-    return {
+    result = {
         "name": str(item["name"]),
         "path": str(item["path"]),
         "size_estimate": format_gb(int(item["size_kb"])),
@@ -89,11 +88,16 @@ def make_green(item: Mapping[str, Any], rule: Any) -> dict[str, Any]:
         "rule_risk": rule.risk,
         "rule_non_targets": list(rule.non_targets),
     }
+    profile = owner_profile(str(item["path"]), rule.id)
+    if profile:
+        result["runtime"] = profile
+        result["kill_processes"] = list(profile["processes"])
+    return result
 
 
 def make_yellow(item: Mapping[str, Any]) -> dict[str, Any]:
     content_type = item_type(str(item["group"]))
-    return {
+    result = {
         "name": str(item["name"]),
         "path": str(item["path"]),
         "size": format_gb(int(item["size_kb"])),
@@ -102,6 +106,12 @@ def make_yellow(item: Mapping[str, Any]) -> dict[str, Any]:
         "disposal": "先在文件管理器中查看；应用托管的数据优先使用应用内清理；确认有独立备份后再处理用户文件。",
         "risk": "删除前需要确认目标不是唯一副本、活动项目或应用核心数据。",
     }
+    profile = owner_profile(str(item["path"]))
+    if profile:
+        result["runtime"] = profile
+    if str(item.get("group", "")) in ("downloads", "temp"):
+        result["reviewed_trash_paths"] = [str(item["path"])]
+    return result
 
 
 def make_red(item: Mapping[str, Any]) -> dict[str, Any]:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bounded, read-only storage scanner for macOS and Windows."""
+"""Bounded, read-only storage scanner for macOS."""
 from __future__ import annotations
 
 import argparse
@@ -63,6 +63,8 @@ class ScanEngine:
         max_workers: int = DEFAULT_WORKERS,
         timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
     ) -> None:
+        if platform != "darwin":
+            raise ValueError(f"current release supports macOS only: {platform}")
         self.platform = platform
         self.max_workers = max(1, min(int(max_workers), 8))
         self.timeout_seconds = max(1, int(timeout_seconds))
@@ -178,7 +180,7 @@ class ScanEngine:
     def _measure(self, task: SizeTask) -> Optional[dict[str, Any]]:
         if self.cancelled.is_set():
             return None
-        size_kb = self._size_macos(task) if self.platform == "darwin" else self._size_windows(task)
+        size_kb = self._size_macos(task)
         if size_kb is None or size_kb < task.min_kb:
             return None
         return {
@@ -330,7 +332,7 @@ def system_info_windows(home: str) -> dict[str, Any]:
 
 def macos_targets(home: str) -> list[ScanTarget]:
     library = os.path.join(home, "Library")
-    return [
+    targets = [
         ScanTarget("home", home, 100 * 1024, exclude_names=("Library", "Downloads", ".cache", ".npm", ".gradle")),
         ScanTarget("library", library, exclude_names=("Caches", "Containers", "Group Containers", "Application Support", "Developer")),
         ScanTarget("caches", os.path.join(library, "Caches")),
@@ -343,12 +345,19 @@ def macos_targets(home: str) -> list[ScanTarget]:
         ScanTarget("system_developer", "/Library/Developer", exclude_names=("CoreSimulator",)),
         ScanTarget("core_simulator", "/Library/Developer/CoreSimulator"),
         ScanTarget("private_var", "/private/var"),
+        ScanTarget("temp", "/private/tmp"),
         ScanTarget("dev_caches", os.path.join(home, ".cache")),
         ScanTarget("dev_caches", os.path.join(home, ".npm", "_cacache"), mode="exact"),
         ScanTarget("dev_caches", os.path.join(home, ".gradle", "caches")),
         ScanTarget("dev_caches", os.path.join(library, "Developer", "Xcode", "DerivedData")),
         ScanTarget("dev_caches", os.path.join(library, "pnpm", "store")),
     ]
+    user_temp = os.environ.get("TMPDIR")
+    if user_temp and os.path.normcase(os.path.realpath(user_temp)) != os.path.normcase(
+        os.path.realpath("/private/tmp")
+    ):
+        targets.append(ScanTarget("temp", user_temp))
+    return targets
 
 
 def windows_targets(home: str) -> list[ScanTarget]:
@@ -378,20 +387,15 @@ def scan_current(
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
 ) -> dict[str, Any]:
     selected = platform or sys.platform
-    if selected.startswith("win"):
-        normalized = "win32"
-        home = os.path.abspath(os.environ.get("USERPROFILE", os.path.expanduser("~")))
-        targets = windows_targets(home)
-    elif selected == "darwin":
-        normalized = "darwin"
-        home = os.path.abspath(os.path.expanduser("~"))
-        targets = macos_targets(home)
-    else:
-        raise ValueError(f"unsupported platform: {selected}")
+    if selected != "darwin":
+        raise ValueError(f"current release supports macOS only: {selected}")
+    normalized = "darwin"
+    home = os.path.abspath(os.path.expanduser("~"))
+    targets = macos_targets(home)
     engine = ScanEngine(normalized, max_workers=max_workers, timeout_seconds=timeout_seconds)
     started = time.monotonic()
     groups, coverage = engine.scan_targets(targets)
-    system = system_info_macos(engine, home) if normalized == "darwin" else system_info_windows(home)
+    system = system_info_macos(engine, home)
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),

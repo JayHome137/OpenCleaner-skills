@@ -35,6 +35,8 @@ def render_report(analysis: dict, template: str, interactive_config: object = No
 
 
 def build_report(source: str, output: str) -> Path:
+    if sys.platform != "darwin":
+        raise ContractError(f"当前版本仅支持 macOS：{sys.platform}")
     analysis = load_json_object(source)
     template = TEMPLATE.read_text(encoding="utf-8")
     rendered = render_report(analysis, template)
@@ -55,10 +57,7 @@ def main() -> None:
         print(f"报告生成失败：{exc}", file=sys.stderr)
         raise SystemExit(1) from exc
     print(f"报告已生成：{destination}")
-    if sys.platform.startswith("win"):
-        print(f'打开：start "" "{destination}"')
-    else:
-        print(f"打开：open '{destination}'")
+    print(f"打开：open '{destination}'")
 
 
 if __name__ == "__main__":

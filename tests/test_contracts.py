@@ -33,8 +33,43 @@ class ContractTests(unittest.TestCase):
             "rejected": [],
         }
         self.assertIs(validate_action_plan(plan), plan)
+        plan["platform"] = "win32"
+        with self.assertRaisesRegex(ContractError, "必须是 darwin"):
+            validate_action_plan(plan)
+        plan["platform"] = "darwin"
         plan["dry_run"] = False
         with self.assertRaises(ContractError):
+            validate_action_plan(plan)
+
+        plan["dry_run"] = True
+        plan["actions"] = [
+            {
+                "action_id": "b" * 24,
+                "mode": "reviewed_trash",
+                "path": "/Users/example/Projects/App/.build",
+                "canonical_path": "/Users/example/Projects/App/.build",
+                "tier": "yellow",
+                "rule_id": "reviewed.project-artifact",
+                "recovery": "可重建",
+                "risk": "重建变慢",
+                "non_targets": [],
+                "identity": {
+                    "device": 1, "inode": 2, "mode": 16384, "kind": "directory",
+                    "size": 0, "mtime_ns": 1,
+                },
+                "parent_identity": {
+                    "device": 1, "inode": 3, "mode": 16384, "kind": "directory",
+                    "size": 0, "mtime_ns": 1,
+                },
+                "project": {
+                    "project_root": "/Users/example/Projects/App",
+                    "artifact_kind": ".build",
+                    "idle_seconds": 0,
+                    "latest_mtime_ns": 1,
+                },
+            }
+        ]
+        with self.assertRaisesRegex(ContractError, "不能少于 1800 秒"):
             validate_action_plan(plan)
 
     def test_json_for_script_cannot_close_script_element(self) -> None:
@@ -45,6 +80,26 @@ class ContractTests(unittest.TestCase):
     def test_analysis_requires_version_and_source_hash(self) -> None:
         with self.assertRaises(ContractError):
             validate_analysis({"schema_version": "1.0"})
+
+    def test_windows_analysis_contract_is_disabled(self) -> None:
+        analysis = {
+            "schema_version": "1.0",
+            "source_scan_sha256": "0" * 64,
+            "generated_at": "2026-08-23 00:00:00",
+            "system": {"os": "Windows 11", "home": "C:\\Users\\example"},
+            "top5": [],
+            "green": [],
+            "yellow": [],
+            "red": [],
+            "summary": {
+                "overview": "test",
+                "tier_stats": {"green": "0 GB", "yellow": "0 GB", "red": "0 GB"},
+                "priority": [],
+                "long_term": [],
+            },
+        }
+        with self.assertRaisesRegex(ContractError, "仅支持 macOS"):
+            validate_analysis(analysis)
 
     def test_green_analysis_item_requires_rule_evidence(self) -> None:
         analysis = {
