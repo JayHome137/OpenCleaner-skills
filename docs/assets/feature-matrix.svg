@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="820" viewBox="0 0 1200 820" role="img" aria-labelledby="title desc">
+  <title id="title">OpenCleaner 功能矩阵</title>
+  <desc id="desc">按能力逐项展示 OpenCleaner 当前实现、用户可见结果、验证状态与安全边界。</desc>
+  <style>
+    text{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;fill:#17202a;letter-spacing:0}.title{font-size:30px;font-weight:700}.sub{font-size:15px;fill:#667085}.head{font-size:14px;font-weight:700}.feature{font-size:14px;font-weight:650}.cell{font-size:13px}.small{font-size:12px;fill:#667085}.yes{fill:#14883b;font-weight:700}.boundary{fill:#1769e0;font-weight:650}
+  </style>
+  <rect width="1200" height="820" fill="#f7f8fa"/>
+  <text x="54" y="62" class="title">OpenCleaner · 功能矩阵</text>
+  <text x="54" y="90" class="sub">从当前实现、用户可见结果和安全边界三个层面核对 macOS 存储分析能力</text>
+
+  <rect x="54" y="128" width="1092" height="594" rx="8" fill="#fff" stroke="#ccd3dc"/>
+  <path d="M54 178V136Q54 128 62 128H1138Q1146 128 1146 136V178Z" fill="#eef3f8"/>
+  <line x1="254" y1="128" x2="254" y2="722" stroke="#d8dee6"/>
+  <line x1="518" y1="128" x2="518" y2="722" stroke="#d8dee6"/>
+  <line x1="782" y1="128" x2="782" y2="722" stroke="#d8dee6"/>
+  <line x1="934" y1="128" x2="934" y2="722" stroke="#d8dee6"/>
+
+  <text x="78" y="163" class="head">能力</text>
+  <text x="386" y="163" class="head" text-anchor="middle">当前实现</text>
+  <text x="650" y="163" class="head" text-anchor="middle">用户可见结果</text>
+  <text x="858" y="163" class="head" text-anchor="middle">状态</text>
+  <text x="958" y="163" class="head">安全边界</text>
+
+  <g>
+    <rect x="54" y="186" width="1092" height="67" fill="#fff"/><line x1="54" y1="253" x2="1146" y2="253" stroke="#e2e6eb"/>
+    <text x="78" y="225" class="feature">只读存储扫描</text>
+    <text x="277" y="216" class="cell">互斥扫描组、有限并发、去重</text><text x="277" y="236" class="small">覆盖率、超时、权限与结构化错误</text>
+    <text x="541" y="216" class="cell">磁盘总览与主要空间来源</text><text x="541" y="236" class="small">明确已扫描、跳过和失败范围</text>
+    <text x="858" y="226" class="yes" text-anchor="middle">完整</text>
+    <text x="958" y="226" class="boundary">扫描阶段不修改目标</text>
+
+    <rect x="54" y="253" width="1092" height="67" fill="#fbfcfd"/><line x1="54" y1="320" x2="1146" y2="320" stroke="#e2e6eb"/>
+    <text x="78" y="292" class="feature">目录浏览与筛选</text>
+    <text x="277" y="282" class="cell">逐层进入、搜索、排序、筛选</text><text x="277" y="302" class="small">固定布局、多选与父目录返回</text>
+    <text x="541" y="282" class="cell">在报告中检查目录内容</text><text x="541" y="302" class="small">保护变更会立即降低建议等级</text>
+    <text x="858" y="293" class="yes" text-anchor="middle">完整</text>
+    <text x="958" y="282" class="boundary">仅登记根可浏览</text><text x="958" y="302" class="small">浏览不会授予 Trash 权限</text>
+
+    <rect x="54" y="320" width="1092" height="67" fill="#fff"/><line x1="54" y1="387" x2="1146" y2="387" stroke="#e2e6eb"/>
+    <text x="78" y="359" class="feature">内容用途与 App 归属</text>
+    <text x="277" y="349" class="cell">Bundle、容器、缓存与后台项</text><text x="277" y="369" class="small">安装包来源、最后使用和副本风险</text>
+    <text x="541" y="349" class="cell">说明基于什么 App、主要用途</text><text x="541" y="369" class="small">显示安装状态与建议处置方式</text>
+    <text x="858" y="360" class="yes" text-anchor="middle">完整</text>
+    <text x="958" y="349" class="boundary">解释只能提高风险</text><text x="958" y="369" class="small">不能生成操作授权</text>
+
+    <rect x="54" y="387" width="1092" height="67" fill="#fbfcfd"/><line x1="54" y1="454" x2="1146" y2="454" stroke="#e2e6eb"/>
+    <text x="78" y="426" class="feature">运行态保护</text>
+    <text x="277" y="416" class="cell">进程、打开文件、SQLite 家族</text><text x="277" y="436" class="small">共享 Bundle ID 与多版本 App</text>
+    <text x="541" y="416" class="cell">显示阻止原因和所有者状态</text><text x="541" y="436" class="small">退出相关应用后重新扫描</text>
+    <text x="858" y="427" class="yes" text-anchor="middle">完整</text>
+    <text x="958" y="416" class="boundary">批次执行前重新采集</text><text x="958" y="436" class="small">未知状态同样拒绝</text>
+
+    <rect x="54" y="454" width="1092" height="67" fill="#fff"/><line x1="54" y1="521" x2="1146" y2="521" stroke="#e2e6eb"/>
+    <text x="78" y="493" class="feature">保护列表与扫描根</text>
+    <text x="277" y="483" class="cell">保护路径、保护 App 持久化</text><text x="277" y="503" class="small">主目录子目录与实际外置卷登记</text>
+    <text x="541" y="483" class="cell">管理不建议处理的内容</text><text x="541" y="503" class="small">按需扩展只读扫描覆盖面</text>
+    <text x="858" y="494" class="yes" text-anchor="middle">完整</text>
+    <text x="958" y="483" class="boundary">只能降权或阻止</text><text x="958" y="503" class="small">自定义根不扩大处置权限</text>
+
+    <rect x="54" y="521" width="1092" height="67" fill="#fbfcfd"/><line x1="54" y1="588" x2="1146" y2="588" stroke="#e2e6eb"/>
+    <text x="78" y="560" class="feature">项目构建产物</text>
+    <text x="277" y="550" class="cell">八类构建系统精确匹配</text><text x="277" y="570" class="small">Git checkpoint、ignored 与 lockfile</text>
+    <text x="541" y="550" class="cell">显示构建系统、产物与项目根</text><text x="541" y="570" class="small">同时显示静置时间要求</text>
+    <text x="858" y="561" class="yes" text-anchor="middle">完整</text>
+    <text x="958" y="550" class="boundary">30 分钟静置 + 打开文件</text><text x="958" y="570" class="small">归档和发布物始终保护</text>
+
+    <rect x="54" y="588" width="1092" height="67" fill="#fff"/><line x1="54" y1="655" x2="1146" y2="655" stroke="#e2e6eb"/>
+    <text x="78" y="627" class="feature">绿灯批量处置</text>
+    <text x="277" y="617" class="cell">多选、批次确认、逐项结果</text><text x="277" y="637" class="small">服务端短期 action ID 计划</text>
+    <text x="541" y="617" class="cell">操作历史、失败原因和复扫</text><text x="541" y="637" class="small">显示原路径与空间变化复核</text>
+    <text x="858" y="628" class="yes" text-anchor="middle">完整</text>
+    <text x="958" y="617" class="boundary">仅确定性绿灯</text><text x="958" y="637" class="small">只移入废纸篓</text>
+
+    <rect x="54" y="655" width="1092" height="67" fill="#fbfcfd"/>
+    <text x="78" y="694" class="feature">黄灯人工复核</text>
+    <text x="277" y="684" class="cell">独立 reviewed_trash 流程</text><text x="277" y="704" class="small">短期一次性令牌且不能混批</text>
+    <text x="541" y="684" class="cell">逐项显示完整路径和风险</text><text x="541" y="704" class="small">完成更强确认后才可申请</text>
+    <text x="858" y="695" class="yes" text-anchor="middle">完整</text>
+    <text x="958" y="684" class="boundary">严格 allowlist 与最终重验</text><text x="958" y="704" class="small">无永久删除或任意路径入口</text>
+  </g>
+
+  <circle cx="64" cy="770" r="6" fill="#14883b"/><text x="78" y="775" class="small">完整：当前已进入 macOS 工作流并通过对应验证</text>
+  <rect x="482" y="764" width="14" height="3" fill="#1769e0"/><text x="504" y="775" class="small">蓝色文字：真正决定能否处置的安全语义</text>
+</svg>
