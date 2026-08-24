@@ -70,11 +70,14 @@ def project_search_roots(home: str, environment: Mapping[str, str]) -> tuple[str
     else:
         candidates = [
             os.path.join(home, "Desktop"),
-            os.path.join(home, "Documents", "Claude", "New PR"),
-            os.path.join(home, "Documents", "Codex"),
+            os.path.join(home, "Documents"),
+            os.path.join(home, "Downloads"),
             os.path.join(home, "Developer"),
             os.path.join(home, "Projects"),
             os.path.join(home, "Code"),
+            os.path.join(home, "go", "src"),
+            os.path.join(home, "plugins"),
+            os.path.join(home, "Sites"),
             os.path.join(home, ".codex", "worktrees"),
         ]
     roots = []

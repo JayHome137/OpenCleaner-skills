@@ -94,7 +94,7 @@ python3 scripts/project_stage.py > /tmp/open-cleaner-project-stage.json
 python3 scripts/validate_plan.py /tmp/open-cleaner-project-stage.json > /tmp/open-cleaner-project-stage-plan.json
 ```
 
-项目阶段扫描只把 allowlist 内、具有项目清单、满足 Git ignored/untracked 边界、没有 Archives/发布包、已静置 30 分钟且无打开文件的生成目录加入黄灯 `reviewed_trash`。自动化到此为止：不能后台移动文件，仍须用户在受控页面逐批确认。
+项目阶段扫描默认覆盖 Desktop、Documents、Downloads、Developer、Projects、Code、go/src、plugins、Sites 和 Codex worktrees；同时发现 Go 共享缓存以及 Codex/Claude 的确定性缓存和临时副本。文件系统不能可靠证明项目由哪个 Agent 创建，因此按项目结构、生成物类型、进程状态和静置时间判断。只有 allowlist 内、具有项目清单、满足 Git ignored/untracked 边界、没有 Archives/发布包、已静置 30 分钟且无打开文件的生成目录才加入黄灯 `reviewed_trash`。自动化到此为止：不能后台移动文件，仍须用户在受控页面逐批确认。
 
 ### 5. 打开报告
 

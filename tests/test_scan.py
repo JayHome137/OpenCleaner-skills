@@ -20,6 +20,20 @@ class ScanEngineTests(unittest.TestCase):
         self.assertIn("/private/tmp", temp_paths)
         self.assertTrue(all(target.mode == "children" for target in targets if target.group == "temp"))
 
+    def test_macos_targets_include_agent_and_shared_workflow_caches(self) -> None:
+        targets = macos_targets("/Users/test")
+        exact_paths = {target.path for target in targets if target.mode == "exact"}
+        self.assertTrue(
+            {
+                "/Users/test/go/pkg/mod",
+                "/Users/test/.codex/cache",
+                "/Users/test/.codex/.tmp/bundled-marketplaces",
+                "/Users/test/.codex/.tmp/plugins",
+                "/Users/test/.codex/plugins/cache",
+                "/Users/test/.claude/cache",
+            }.issubset(exact_paths)
+        )
+
     def test_scan_deduplicates_scheduled_paths_and_reports_coverage(self) -> None:
         with tempfile.TemporaryDirectory(prefix="storage-scan-") as temp:
             root = Path(temp)

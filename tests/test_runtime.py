@@ -17,6 +17,9 @@ class RuntimeTests(unittest.TestCase):
             ("/Users/test/.npm/_cacache/content-v2", "common.npm-content-cache", "npm"),
             ("/Users/test/.gradle/caches/modules", "common.gradle-cache-entry", "gradle"),
             ("/Users/test/Library/pnpm/store/v3", "macos.pnpm-cache-entry", "pnpm"),
+            ("/Users/test/go/pkg/mod", "common.go-module-cache", "go-module"),
+            ("/Users/test/.codex/.tmp/plugins", "common.codex-plugins-temp", "codex"),
+            ("/Users/test/.claude/cache", "common.claude-cache", "claude"),
             ("/Users/test/.docker/buildx", "", "docker"),
             ("/Users/test/.tart/cache", "", "tart"),
         ]

@@ -402,7 +402,12 @@ class SafetyPolicy:
                 if runtime["state"] == "unknown":
                     raise PolicyError("runtime_unknown", "无法确认所有者工具是否正在运行，已阻止处置")
                 result["runtime"] = runtime
-            if rule_id == "macos.xcode-derived-data-entry" or os.path.basename(target) == "ms-playwright":
+            workflow_owner = str(runtime.get("id", "")) if runtime else ""
+            if (
+                rule_id == "macos.xcode-derived-data-entry"
+                or os.path.basename(target) == "ms-playwright"
+                or workflow_owner in {"pnpm", "npm", "gradle", "go-build", "go-module", "codex", "claude"}
+            ):
                 try:
                     result["activity"] = inspect_artifact_activity(target, self.environment)
                 except ProjectArtifactError as exc:

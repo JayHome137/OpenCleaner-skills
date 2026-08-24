@@ -34,6 +34,27 @@ class RuleCatalogTests(unittest.TestCase):
             catalog = RuleCatalog("darwin", {"HOME": str(home)})
             self.assertIsNone(catalog.match(str(target), "trash"))
 
+    def test_agent_and_go_workflow_rules_are_exactly_scoped(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="storage-rules-") as temporary:
+            home = Path(temporary) / "home"
+            expected = {
+                home / "go" / "pkg" / "mod": "common.go-module-cache",
+                home / ".codex" / "cache": "common.codex-cache",
+                home / ".codex" / ".tmp" / "bundled-marketplaces": "common.codex-bundled-marketplaces-temp",
+                home / ".codex" / ".tmp" / "plugins": "common.codex-plugins-temp",
+                home / ".codex" / "plugins" / "cache": "common.codex-plugin-cache",
+                home / ".claude" / "cache": "common.claude-cache",
+            }
+            for path in expected:
+                path.mkdir(parents=True, exist_ok=True)
+            catalog = RuleCatalog("darwin", {"HOME": str(home)})
+            for path, rule_id in expected.items():
+                with self.subTest(rule_id=rule_id):
+                    self.assertEqual(catalog.match(str(path), "trash").id, rule_id)
+            backup = home / ".codex" / ".tmp" / "plugins-backup-example"
+            backup.mkdir()
+            self.assertIsNone(catalog.match(str(backup), "trash"))
+
     def test_windows_rule_entry_is_disabled(self) -> None:
         with self.assertRaisesRegex(RuleError, "仅支持 macOS"):
             normalized_platform("win32")

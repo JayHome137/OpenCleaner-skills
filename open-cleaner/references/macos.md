@@ -12,8 +12,11 @@
 | `common.user-cache-entry` | `~/.cache` 下的具体子项 | 未知模型、会话或下载内容可由 Agent 提高为黄灯。 |
 | `common.npm-content-cache` | `~/.npm/_cacache` | 不包含 `~/.npmrc` 或其他配置。 |
 | `common.gradle-cache-entry` | `~/.gradle/caches` 下的具体子项 | 不包含项目源码、wrapper 或用户配置。 |
+| `common.go-module-cache` | `~/go/pkg/mod` | 不包含 Go 源码、`go.mod`、`go.sum`、`~/go/bin` 或 `~/go/src`。 |
+| `common.codex-*` | `~/.codex/cache`、确定性 `.tmp` 副本和插件 cache | 不包含 sessions、worktrees、memories、skills、插件数据、配置或备份。 |
+| `common.claude-cache` | `~/.claude/cache` | 不包含 projects、sessions、tasks、backups、插件或配置。 |
 
-规则授权仅说明路径类别可恢复，执行时仍要通过保护目录、符号链接、文件身份、父目录、所有者工具运行状态和短期计划检查。pnpm、npm、Gradle、Chrome、Codex、Claude、UTM、Tart、Docker/OrbStack 和微信等已知识别项在进程活动或状态未知时失败关闭；展示的所有者工具命令不会自动执行。
+规则授权仅说明路径类别可恢复，执行时仍要通过保护目录、符号链接、文件身份、父目录、所有者工具运行状态、30 分钟静置和短期计划检查。pnpm、npm、Gradle、Go、Chrome、Codex、Claude、UTM、Tart、Docker/OrbStack 和微信等已知识别项在进程活动、恢复工具缺失或状态未知时失败关闭；展示的所有者工具命令不会自动执行。
 
 ## 必须人工判断的范围
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
+import time
 import unittest
 from datetime import timedelta
 from pathlib import Path
@@ -84,6 +85,10 @@ class PolicyTests(unittest.TestCase):
             (
                 self.home / "Library" / "Caches" / "ms-playwright",
                 "macos.library-cache-entry",
+            ),
+            (
+                self.home / "go" / "pkg" / "mod",
+                "common.go-module-cache",
             ),
         )
         guarded = SafetyPolicy(
@@ -349,6 +354,8 @@ class PolicyTests(unittest.TestCase):
     def test_active_and_unknown_owner_processes_are_rejected_from_plan(self) -> None:
         target = self.home / ".npm" / "_cacache"
         target.mkdir(parents=True)
+        old = time.time() - 3600
+        os.utime(target, (old, old))
         data = analysis_for(
             self.home,
             green=[
@@ -380,6 +387,8 @@ class PolicyTests(unittest.TestCase):
     def test_process_started_after_plan_invalidates_action(self) -> None:
         target = self.home / ".npm" / "_cacache"
         target.mkdir(parents=True)
+        old = time.time() - 3600
+        os.utime(target, (old, old))
         state = {"active": False}
         inspector = RuntimeInspector(
             "darwin",

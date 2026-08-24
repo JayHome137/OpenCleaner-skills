@@ -63,14 +63,14 @@ def owner_profile(path: str, rule_id: str = "") -> dict[str, Any]:
                 "execution": "review-only",
             },
         }
-    elif basename == "go-build" or "/go-build/" in normalized:
+    elif rule_id == "common.go-module-cache" or basename == "go-build" or "/go-build/" in normalized:
         profile = {
-            "id": "go-build",
+            "id": "go-module" if rule_id == "common.go-module-cache" else "go-build",
             "processes": ["go build", "go test"],
             "owner_tool": {
                 "name": "Go",
-                "inspect_command": "go env GOCACHE",
-                "cleanup_command": "go clean -cache",
+                "inspect_command": "go env GOMODCACHE" if rule_id == "common.go-module-cache" else "go env GOCACHE",
+                "cleanup_command": "go clean -modcache" if rule_id == "common.go-module-cache" else "go clean -cache",
                 "execution": "review-only",
             },
         }
@@ -80,13 +80,21 @@ def owner_profile(path: str, rule_id: str = "") -> dict[str, Any]:
             "processes": ["Google Chrome"],
             "owner_tool": {"name": "Chrome", "inspect_command": "", "cleanup_command": "", "execution": "app-managed"},
         }
-    elif "/library/caches/com.openai.codex" in normalized or "/.cache/codex-runtimes" in normalized:
+    elif (
+        rule_id.startswith("common.codex-")
+        or "/library/caches/codex" in normalized
+        or "/library/caches/com.openai.codex" in normalized
+        or "/.cache/codex-runtimes" in normalized
+        or "/.codex/cache" in normalized
+        or "/.codex/.tmp/" in normalized
+        or "/.codex/plugins/cache" in normalized
+    ):
         profile = {
             "id": "codex",
             "processes": ["Codex"],
             "owner_tool": {"name": "Codex", "inspect_command": "", "cleanup_command": "", "execution": "app-managed"},
         }
-    elif "claude" in basename or "/claude" in normalized:
+    elif rule_id == "common.claude-cache" or "claude" in basename or "/claude" in normalized or "/.claude/" in normalized:
         profile = {
             "id": "claude",
             "processes": ["Claude"],

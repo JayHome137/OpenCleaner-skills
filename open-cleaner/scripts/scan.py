@@ -349,6 +349,12 @@ def macos_targets(home: str) -> list[ScanTarget]:
         ScanTarget("dev_caches", os.path.join(home, ".cache")),
         ScanTarget("dev_caches", os.path.join(home, ".npm", "_cacache"), mode="exact"),
         ScanTarget("dev_caches", os.path.join(home, ".gradle", "caches")),
+        ScanTarget("dev_caches", os.path.join(home, "go", "pkg", "mod"), mode="exact"),
+        ScanTarget("dev_caches", os.path.join(home, ".codex", "cache"), mode="exact"),
+        ScanTarget("dev_caches", os.path.join(home, ".codex", ".tmp", "bundled-marketplaces"), mode="exact"),
+        ScanTarget("dev_caches", os.path.join(home, ".codex", ".tmp", "plugins"), mode="exact"),
+        ScanTarget("dev_caches", os.path.join(home, ".codex", "plugins", "cache"), mode="exact"),
+        ScanTarget("dev_caches", os.path.join(home, ".claude", "cache"), mode="exact"),
         ScanTarget("dev_caches", os.path.join(library, "Developer", "Xcode", "DerivedData")),
         ScanTarget("dev_caches", os.path.join(library, "pnpm", "store")),
     ]

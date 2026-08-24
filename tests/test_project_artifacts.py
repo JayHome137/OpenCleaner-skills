@@ -18,6 +18,7 @@ from project_artifacts import (
     ProjectArtifactError,
     discover_artifact_paths,
     inspect_project_artifact,
+    project_search_roots,
 )
 from project_stage import augment_with_project_artifacts
 from rules import canonical_path
@@ -65,6 +66,30 @@ class ProjectArtifactTests(unittest.TestCase):
         result = self.inspect(target)
         self.assertEqual(result["project_root"], canonical_path(str(project)))
         self.assertEqual(result["artifact_kind"], ".build")
+
+    def test_default_search_roots_cover_common_project_locations(self) -> None:
+        expected = (
+            "Desktop",
+            "Documents",
+            "Downloads",
+            "Developer",
+            "Projects",
+            "Code",
+            "plugins",
+            "Sites",
+        )
+        for name in expected:
+            (self.home / name).mkdir(exist_ok=True)
+        worktrees = self.home / ".codex" / "worktrees"
+        worktrees.mkdir(parents=True)
+        go_sources = self.home / "go" / "src"
+        go_sources.mkdir(parents=True)
+        roots = set(project_search_roots(str(self.home), {"HOME": str(self.home)}))
+        self.assertEqual(
+            roots,
+            {canonical_path(str(self.home / name)) for name in expected}
+            | {canonical_path(str(worktrees)), canonical_path(str(go_sources))},
+        )
 
     def test_recent_or_open_artifact_is_rejected(self) -> None:
         _project, target = self.make_swift_project()
