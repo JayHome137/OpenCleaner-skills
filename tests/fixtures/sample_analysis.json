@@ -90,7 +90,17 @@
       "rule_id": "macos.xcode-derived-data-entry",
       "rule_reason": "Xcode 会在下一次构建时重新生成派生数据。",
       "rule_risk": "下一次索引和构建耗时会增加。",
-      "rule_non_targets": ["Xcode Archives", "项目源代码", "DerivedData 根目录本身"]
+      "rule_non_targets": ["Xcode Archives", "项目源代码", "DerivedData 根目录本身"],
+      "runtime": {
+        "id": "xcode",
+        "processes": ["Xcode", "xcodebuild", "swiftc"],
+        "owner_tool": {
+          "name": "Xcode",
+          "inspect_command": "",
+          "cleanup_command": "",
+          "execution": "app-managed"
+        }
+      }
     },
     {
       "name": "应用缓存",
@@ -122,7 +132,8 @@
       "content_profile": "下载的安装镜像和压缩包。",
       "why_manual": "可能包含唯一副本或仍需使用的软件版本。",
       "disposal": "确认软件已经安装且无需保留旧版本后再手动处理。",
-      "risk": "删除后可能需要重新下载。"
+      "risk": "删除后可能需要重新下载。",
+      "reviewed_trash_paths": ["/Users/example/Downloads/installers"]
     }
   ],
   "red": [

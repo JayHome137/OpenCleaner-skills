@@ -51,7 +51,8 @@
     line-height: 1.35;
   }
   .block-count { color: var(--muted); font-size: 12px; font-weight: 500; }
-  .block-tools { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+  .block-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; margin-left: auto; }
+  .section-toggle { min-height: 32px; padding: 5px 10px; }
 
   .surface {
     background: var(--surface);
@@ -157,7 +158,21 @@
     text-align: left;
   }
   .finding-toggle:hover { background: #fafbfc; }
+  .finding-primary { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 6px 9px; }
   .finding-name { min-width: 0; overflow-wrap: anywhere; font-size: 15px; font-weight: 700; }
+  .finding-status {
+    display: inline-flex;
+    align-items: center;
+    min-height: 22px;
+    padding: 2px 7px;
+    border-radius: 5px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .finding-status.can-trash { background: var(--green-soft); color: var(--green); }
+  .finding-status.needs-review { background: var(--amber-soft); color: var(--amber); }
+  .finding-status.blocked { background: var(--red-soft); color: var(--red); }
   .finding-size { color: var(--blue); font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .finding-arrow { color: var(--muted); transition: transform .18s ease; }
   .finding.expanded .finding-arrow { transform: rotate(90deg); }
@@ -174,6 +189,19 @@
   }
   .detail { margin: 10px 0; }
   .detail-title { margin-bottom: 2px; color: var(--muted); font-size: 12px; font-weight: 700; }
+  .disposal-verdict {
+    display: grid;
+    grid-template-columns: minmax(112px, auto) minmax(0, 1fr);
+    gap: 6px 12px;
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+  }
+  .disposal-verdict.can-trash { background: var(--green-soft); color: #0c642b; }
+  .disposal-verdict.needs-review { background: var(--amber-soft); color: #7a4300; }
+  .disposal-verdict.blocked { background: var(--red-soft); color: #942929; }
+  .disposal-verdict span { min-width: 0; overflow-wrap: anywhere; }
   .tag {
     display: inline-block;
     margin: 2px 5px 2px 0;
@@ -288,11 +316,12 @@
     th:nth-child(7), td:nth-child(7) { display: none; }
     td:nth-child(5) b { overflow-wrap: anywhere; }
     .block-title { align-items: flex-start; flex-wrap: wrap; font-size: 17px; }
-    .block-tools { width: 100%; margin-left: 0; }
+    .block-tools { width: 100%; margin-left: 0; justify-content: flex-start; }
     .finding-toggle { grid-template-columns: 10px minmax(0, 1fr) 16px; }
     .finding-size { grid-column: 2; grid-row: 2; white-space: normal; }
     .finding-arrow { grid-column: 3; grid-row: 1 / span 2; }
     .finding-body { padding-left: 16px; }
+    .disposal-verdict { grid-template-columns: 1fr; }
     .disk-row { grid-template-columns: 44px 1fr; }
     .disk-value { grid-column: 2; }
     .session-bar, .batch-bar { align-items: stretch; flex-direction: column; }
@@ -522,18 +551,74 @@ function actionPanel(item, tier) {
   return `${runtime}<div class="detail action-panel"><div class="detail-title">受控操作</div><div class="action-row">${buttons}<span class="action-state" aria-live="polite"></span></div><div class="action-help">页面只提交短期操作 ID；服务端会重新验证规则、真实路径、运行状态和文件身份。移到废纸篓可恢复，清空后才释放空间。</div></div>${selectionControl(item, tier)}`;
 }
 
+function disposition(item, tier) {
+  if (tier === "green") {
+    return {
+      tone: "can-trash",
+      short: "可移入废纸篓",
+      title: "可以处理",
+      explanation: "此项目命中确定性可恢复规则，可以移入废纸篓；清空废纸篓后才会实际释放空间。"
+    };
+  }
+  if (tier === "yellow" && item.reviewed_trash_paths && item.reviewed_trash_paths.length) {
+    return {
+      tone: "needs-review",
+      short: "需人工复核",
+      title: "人工复核后可以处理",
+      explanation: "此项目包含受限处置路径，但必须逐项确认不是唯一副本、活动项目或应用核心数据，再移入废纸篓。"
+    };
+  }
+  if (tier === "yellow") {
+    return {
+      tone: "blocked",
+      short: "当前不建议删除",
+      title: "当前不建议删除",
+      explanation: "没有确定性规则或受限复核授权证明整个项目可安全处置；请按下方建议在所属应用或访达中核对。"
+    };
+  }
+  return {
+    tone: "blocked",
+    short: "不可直接处理",
+    title: "不能由 OpenCleaner 直接处理",
+    explanation: "这是应用本体或受系统管理的内容；OpenCleaner 仅提供定位与正规卸载建议。"
+  };
+}
+
+function ownerName(item, tier) {
+  const runtimeOwner = item.runtime && item.runtime.owner_tool && item.runtime.owner_tool.name;
+  if (runtimeOwner) return runtimeOwner;
+  if (tier === "red" && String(item.path || "").toLowerCase().endsWith(".app")) return item.name || "未命名应用";
+  const identifier = String(item.path || "").match(/\/Library\/(?:Group )?(?:Containers|Caches)\/([^/]+)/i);
+  if (identifier) return `未识别显示名称（目录标识：${identifier[1]}）`;
+  return "未识别到明确归属应用";
+}
+
+function purposeText(item, tier) {
+  if (tier === "green") return item.rule_reason || "可再生缓存或临时内容。";
+  if (tier === "yellow") return item.content_profile || "需要查看实际内容后判断。";
+  return item.why_keep || "应用本体或受系统管理的内容。";
+}
+
+function decisionBasis(item, tier) {
+  if (tier === "green") return item.rule_id ? `确定性授权规则 ${item.rule_id}` : "确定性可恢复规则";
+  if (tier === "yellow") return item.why_manual || "没有确定性规则证明整个目标可再生。";
+  return item.why_keep || "应用本体不属于自动处置范围。";
+}
+
 function findingBody(item, tier) {
+  const verdict = disposition(item, tier);
+  const summary = `<div class="disposal-verdict ${h(verdict.tone)}"><b>${h(verdict.title)}</b><span>${h(verdict.explanation)}</span></div>${detail("归属应用 / 工具", h(ownerName(item, tier)))}${detail("主要作用", h(purposeText(item, tier)))}${detail("判断依据", h(decisionBasis(item, tier)))}`;
   if (tier === "green") {
     const processes = item.kill_processes && item.kill_processes.length ? item.kill_processes.map(value => `<span class="tag">${h(value)}</span>`).join("") : `<span class="action-help">无需关闭任何进程</span>`;
     const exclusions = item.rule_non_targets && item.rule_non_targets.length
       ? `<ul>${item.rule_non_targets.map(value => `<li>${h(value)}</li>`).join("")}</ul>`
       : `<span class="action-help">未提供</span>`;
-    return `${detail("授权规则", `<span class="tag">${h(item.rule_id || "未提供")}</span>${item.rule_reason ? ` <span class="action-help">${h(item.rule_reason)}</span>` : ""}`)}${detail("规则风险", h(item.rule_risk || "首次使用时可能需要重建缓存。"))}${detail("不在规则范围内", exclusions)}${detail("清理前需关闭", processes)}${detail("可选命令（自行确认后执行）", commandBlocks(item.commands))}${actionPanel(item, tier)}`;
+    return `${summary}${detail("规则风险", h(item.rule_risk || "首次使用时可能需要重建缓存。"))}${detail("不在规则范围内", exclusions)}${detail("清理前需关闭", processes)}${detail("可选命令（自行确认后执行）", commandBlocks(item.commands))}${actionPanel(item, tier)}`;
   }
   if (tier === "yellow") {
-    return `${detail("内容画像", h(item.content_profile))}${detail("为什么需要人工判断", h(item.why_manual))}${detail("处置路径", h(item.disposal))}${item.risk ? `<div class="risk-note">${h(item.risk)}</div>` : ""}${actionPanel(item, tier)}`;
+    return `${summary}${detail("建议处理方式", h(item.disposal))}${item.risk ? `<div class="risk-note">${h(item.risk)}</div>` : ""}${actionPanel(item, tier)}`;
   }
-  return `${detail("为什么不建议手动处理", h(item.why_keep))}${detail("卸载 / 释放建议", h(item.indirect_release))}${item.auto_reclaim ? detail("是否自动回收", h(item.auto_reclaim)) : ""}${actionPanel(item, tier)}`;
+  return `${summary}${detail("卸载 / 释放建议", h(item.indirect_release))}${item.auto_reclaim ? detail("是否自动回收", h(item.auto_reclaim)) : ""}${actionPanel(item, tier)}`;
 }
 
 function detail(label, content) {
@@ -542,20 +627,41 @@ function detail(label, content) {
 
 function finding(item, tier) {
   const size = item.size_estimate || item.size || "";
-  return `<article class="finding ${h(tier)}"><button class="finding-toggle" type="button" aria-expanded="false"><span class="level-dot ${h(tier)}"></span><span class="finding-name">${h(item.name)}</span><span class="finding-size">${h(compactSize(size))}</span><span class="finding-arrow">›</span></button><div class="finding-body"><div class="path-line">${h(item.path)}</div>${findingBody(item, tier)}</div></article>`;
+  const verdict = disposition(item, tier);
+  return `<article class="finding ${h(tier)}"><button class="finding-toggle" type="button" aria-expanded="false"><span class="level-dot ${h(tier)}"></span><span class="finding-primary"><span class="finding-name">${h(item.name)}</span><span class="finding-status ${h(verdict.tone)}">${h(verdict.short)}</span></span><span class="finding-size">${h(compactSize(size))}</span><span class="finding-arrow">›</span></button><div class="finding-body"><div class="path-line">${h(item.path)}</div>${findingBody(item, tier)}</div></article>`;
 }
 
 function findingsSection(title, items, tier) {
   if (!items || !items.length) return "";
-  let batch = "";
+  let selection = "";
   if (tier === "green" && SESSION) {
     const ids = [...new Set(items.flatMap(item => idsFor(item.trash_paths || [], "trash")))];
-    if (ids.length) batch = `<span class="block-tools"><button class="action-button secondary select-all" type="button" data-action-ids="${h(ids.join(","))}">全选可清理项</button></span>`;
+    if (ids.length) selection = `<button class="action-button secondary select-all" type="button" data-action-ids="${h(ids.join(","))}">全选可清理项</button>`;
   } else if (tier === "yellow" && SESSION) {
     const ids = [...new Set(items.flatMap(item => idsFor(item.reviewed_trash_paths || [], "reviewed_trash")))];
-    if (ids.length) batch = `<span class="block-tools"><button class="action-button secondary select-all" type="button" data-action-ids="${h(ids.join(","))}">选择可复核项</button></span>`;
+    if (ids.length) selection = `<button class="action-button secondary select-all" type="button" data-action-ids="${h(ids.join(","))}">选择可复核项</button>`;
   }
-  return `<section class="block"><h2 class="block-title">${h(title)} <span class="block-count">${items.length} 项</span>${batch}</h2>${items.map(item => finding(item, tier)).join("")}</section>`;
+  const tools = `<span class="block-tools"><button class="action-button secondary section-toggle section-expand" type="button" data-expanded="true">展开全部</button><button class="action-button secondary section-toggle section-collapse" type="button" data-expanded="false" disabled>收起全部</button>${selection}</span>`;
+  return `<section class="block findings-section" data-tier="${h(tier)}"><h2 class="block-title">${h(title)} <span class="block-count">${items.length} 项</span>${tools}</h2>${items.map(item => finding(item, tier)).join("")}</section>`;
+}
+
+function setSectionExpanded(section, expanded) {
+  section.querySelectorAll(".finding").forEach(card => {
+    card.classList.toggle("expanded", expanded);
+    const toggle = card.querySelector(".finding-toggle");
+    if (toggle) toggle.setAttribute("aria-expanded", String(expanded));
+  });
+  updateSectionButtons(section);
+}
+
+function updateSectionButtons(section) {
+  const cards = [...section.querySelectorAll(".finding")];
+  const allExpanded = cards.length > 0 && cards.every(card => card.classList.contains("expanded"));
+  const allCollapsed = cards.every(card => !card.classList.contains("expanded"));
+  const expand = section.querySelector(".section-expand");
+  const collapse = section.querySelector(".section-collapse");
+  if (expand) expand.disabled = allExpanded;
+  if (collapse) collapse.disabled = allCollapsed;
 }
 
 function permissions(paths) {
@@ -766,11 +872,19 @@ function mount() {
 }
 
 document.addEventListener("click", event => {
+  const sectionToggle = event.target.closest(".section-toggle");
+  if (sectionToggle) {
+    const section = sectionToggle.closest(".findings-section");
+    if (section) setSectionExpanded(section, sectionToggle.dataset.expanded === "true");
+    return;
+  }
   const toggle = event.target.closest(".finding-toggle");
   if (toggle) {
     const card = toggle.closest(".finding");
     const expanded = card.classList.toggle("expanded");
     toggle.setAttribute("aria-expanded", String(expanded));
+    const section = card.closest(".findings-section");
+    if (section) updateSectionButtons(section);
     return;
   }
   const action = event.target.closest(".action-button");
