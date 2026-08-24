@@ -40,7 +40,14 @@ class ProjectArtifactTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp.cleanup()
 
-    def make_swift_project(self, name: str = "Example") -> tuple[Path, Path]:
+    def commit_project(self, project: Path) -> None:
+        subprocess.run(["git", "-C", str(project), "add", "."], check=True)
+        subprocess.run(
+            ["git", "-C", str(project), "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "checkpoint"],
+            check=True,
+        )
+
+    def make_swift_project(self, name: str = "Example", initialize_git: bool = True) -> tuple[Path, Path]:
         project = self.projects / name
         target = project / ".build"
         target.mkdir(parents=True)
@@ -50,6 +57,10 @@ class ProjectArtifactTests(unittest.TestCase):
         old = time.time() - 3600
         os.utime(artifact, (old, old))
         os.utime(target, (old, old))
+        if initialize_git:
+            subprocess.run(["git", "init", "-q", str(project)], check=True)
+            (project / ".gitignore").write_text(".build/\nbuild/\n", encoding="utf-8")
+            self.commit_project(project)
         return project, target
 
     def inspect(self, target: Path, **overrides):
@@ -114,6 +125,9 @@ class ProjectArtifactTests(unittest.TestCase):
         target = project / "build"
         (target / "Archives").mkdir(parents=True)
         (project / "project.yml").write_text("name: Example\n", encoding="utf-8")
+        subprocess.run(["git", "init", "-q", str(project)], check=True)
+        (project / ".gitignore").write_text("build/\n", encoding="utf-8")
+        self.commit_project(project)
         old = time.time() - 3600
         os.utime(target / "Archives", (old, old))
         os.utime(target, (old, old))
@@ -122,14 +136,27 @@ class ProjectArtifactTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, "protected_build_output")
 
     def test_git_project_requires_ignored_untracked_artifact(self) -> None:
-        project, target = self.make_swift_project("GitProject")
+        project, target = self.make_swift_project("GitProject", initialize_git=False)
         subprocess.run(["git", "init", "-q", str(project)], check=True)
+        subprocess.run(["git", "-C", str(project), "add", "Package.swift"], check=True)
+        subprocess.run(
+            ["git", "-C", str(project), "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "checkpoint"],
+            check=True,
+        )
         with self.assertRaises(ProjectArtifactError) as unignored:
             self.inspect(target)
         self.assertEqual(unignored.exception.code, "not_git_ignored")
 
         (project / ".gitignore").write_text(".build/\n", encoding="utf-8")
         self.assertEqual(self.inspect(target)["project_root"], canonical_path(str(project)))
+
+    def test_git_project_requires_a_recoverable_checkpoint(self) -> None:
+        project, target = self.make_swift_project("NoCheckpoint", initialize_git=False)
+        subprocess.run(["git", "init", "-q", str(project)], check=True)
+        (project / ".gitignore").write_text(".build/\n", encoding="utf-8")
+        with self.assertRaises(ProjectArtifactError) as raised:
+            self.inspect(target)
+        self.assertEqual(raised.exception.code, "git_checkpoint_missing")
 
     def test_discovery_and_policy_authorization_share_the_same_boundary(self) -> None:
         _project, target = self.make_swift_project()
@@ -157,6 +184,7 @@ class ProjectArtifactTests(unittest.TestCase):
         metadata = {
             "project_root": canonical_path(str(project)),
             "artifact_kind": ".build",
+            "build_system": "swift",
             "idle_seconds": 1800,
             "latest_mtime_ns": int(target.stat().st_mtime_ns),
         }
@@ -171,6 +199,7 @@ class ProjectArtifactTests(unittest.TestCase):
         self.assertEqual(result["analysis_origin"], "project-stage")
         self.assertEqual(result["project_stage"]["actionable"], 1)
         self.assertEqual(result["yellow"][-1]["stage_status"]["state"], "ready")
+        self.assertEqual(result["yellow"][-1]["project_artifact"]["build_system"], "swift")
 
     def test_invalid_idle_configuration_fails_before_mutating_analysis(self) -> None:
         source = analysis_for(self.home)

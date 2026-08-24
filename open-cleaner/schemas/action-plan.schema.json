@@ -95,6 +95,7 @@
             "properties": {
               "project_root": {"type": "string"},
               "artifact_kind": {"type": "string"},
+              "build_system": {"type": "string"},
               "idle_seconds": {"type": "integer", "minimum": 1800},
               "latest_mtime_ns": {"type": "integer", "minimum": 0}
             },

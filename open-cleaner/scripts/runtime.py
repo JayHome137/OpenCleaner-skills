@@ -12,6 +12,7 @@ from typing import Any, Callable, Optional
 
 ProcessChecker = Callable[[str], Optional[bool]]
 ToolChecker = Callable[[str], bool]
+OpenFileChecker = Callable[[str], Optional[bool]]
 
 
 def owner_profile(path: str, rule_id: str = "") -> dict[str, Any]:
@@ -143,10 +144,62 @@ class RuntimeInspector:
         platform: str,
         checker: Optional[ProcessChecker] = None,
         tool_checker: Optional[ToolChecker] = None,
+        open_file_checker: Optional[OpenFileChecker] = None,
     ) -> None:
         self.platform = platform
         self.checker = checker or self._default_check
         self.tool_checker = tool_checker or (lambda executable: shutil.which(executable) is not None)
+        self._uses_default_open_file_checker = open_file_checker is None
+        self.open_file_checker = open_file_checker or self._default_open_file_check
+        self._open_file_snapshot: Optional[list[str]] = None
+        self._open_file_snapshot_active = False
+
+    def _capture_open_files(self) -> Optional[list[str]]:
+        if self.platform != "darwin":
+            return None
+        try:
+            result = subprocess.run(
+                ["/usr/sbin/lsof", "-n", "-F", "n"],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if result.returncode not in (0, 1):
+            return None
+        return [
+            os.path.normcase(os.path.realpath(line[1:]))
+            for line in result.stdout.splitlines()
+            if line.startswith("n")
+        ]
+
+    def _matches_open_snapshot(self, path: str, opened_paths: list[str]) -> bool:
+        target = os.path.normcase(os.path.realpath(path))
+        prefix = target.rstrip(os.sep) + os.sep
+        return any(opened == target or opened.startswith(prefix) for opened in opened_paths)
+
+    def _default_open_file_check(self, path: str) -> Optional[bool]:
+        opened_paths = self._capture_open_files()
+        return None if opened_paths is None else self._matches_open_snapshot(path, opened_paths)
+
+    def refresh_open_file_snapshot(self) -> None:
+        if not self._uses_default_open_file_checker:
+            return
+        self._open_file_snapshot = self._capture_open_files()
+        self._open_file_snapshot_active = True
+
+    def clear_open_file_snapshot(self) -> None:
+        self._open_file_snapshot = None
+        self._open_file_snapshot_active = False
+
+    def inspect_open_files(self, path: str) -> Optional[bool]:
+        if self._uses_default_open_file_checker and self._open_file_snapshot_active:
+            if self._open_file_snapshot is None:
+                return None
+            return self._matches_open_snapshot(path, self._open_file_snapshot)
+        return self.open_file_checker(path)
 
     def _default_check(self, pattern: str) -> Optional[bool]:
         try:

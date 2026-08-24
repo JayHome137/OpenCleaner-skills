@@ -17,32 +17,53 @@ PROJECT_MARKERS = (
     "pyproject.toml",
     "go.mod",
     "Cargo.toml",
+    "pom.xml",
+    "build.gradle",
+    "build.gradle.kts",
+    "settings.gradle",
+    "settings.gradle.kts",
     "project.yml",
 )
 ARTIFACT_NAMES = {
     ".build",
+    ".gradle",
+    ".next",
+    ".turbo",
     ".mypy_cache",
     ".nyc_output",
     ".pytest_cache",
     ".ruff_cache",
     "__pycache__",
     "build",
+    "bin",
     "coverage",
     "DerivedData",
+    "dist",
+    "node_modules",
+    "out",
     "playwright-report",
     "test-results",
+    "target",
 }
 WALK_PRUNE_NAMES = {
     ".git",
     ".Trash",
     ".venv",
     "Pods",
-    "node_modules",
-    "target",
     "venv",
 }
 PROTECTED_BUILD_NAMES = {"Archives"}
 PROTECTED_BUILD_SUFFIXES = {".aab", ".dmg", ".ipa", ".pkg", ".xcarchive", ".zip"}
+BUILD_SYSTEMS = {
+    "swift": ({"Package.swift"}, {".build", "build"}),
+    "node": ({"package.json"}, {"node_modules", "dist", ".next", ".turbo", "build", "coverage", "playwright-report", "test-results"}),
+    "python": ({"pyproject.toml"}, {".mypy_cache", ".nyc_output", ".pytest_cache", ".ruff_cache", "__pycache__", "build", "coverage"}),
+    "go": ({"go.mod"}, {"bin", "build", "coverage"}),
+    "rust": ({"Cargo.toml"}, {"target", "coverage"}),
+    "maven": ({"pom.xml"}, {"target"}),
+    "gradle": ({"build.gradle", "build.gradle.kts", "settings.gradle", "settings.gradle.kts"}, {".gradle", "build", "out"}),
+    "xcode": ({"project.yml"}, {"DerivedData", "build"}),
+}
 
 
 class ProjectArtifactError(ValueError):
@@ -100,6 +121,33 @@ def _has_project_marker(path: str) -> bool:
         return False
 
 
+def _build_system_for(project_root: str, artifact_name: str) -> str:
+    for system, (markers, artifacts) in BUILD_SYSTEMS.items():
+        if artifact_name not in artifacts:
+            continue
+        if not any(os.path.isfile(os.path.join(project_root, marker)) for marker in markers):
+            continue
+        if system == "node" and artifact_name == "node_modules":
+            locks = ("package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "bun.lockb")
+            if not any(
+                os.path.isfile(os.path.join(project_root, lock))
+                and _git_output(["git", "-C", project_root, "cat-file", "-e", f"HEAD:{lock}"]).returncode == 0
+                for lock in locks
+            ):
+                raise ProjectArtifactError("dependency_lock_missing", "node_modules 缺少依赖锁文件，不能作为可重建目标")
+        if system == "rust" and artifact_name == "target":
+            cargo_lock = os.path.join(project_root, "Cargo.lock")
+            tracked = _git_output(["git", "-C", project_root, "cat-file", "-e", "HEAD:Cargo.lock"])
+            if not os.path.isfile(cargo_lock) or tracked.returncode != 0:
+                raise ProjectArtifactError("dependency_lock_missing", "Rust target 缺少已提交的 Cargo.lock，不能作为精确可重建目标")
+        return system
+    if artifact_name == "DerivedData" and any(
+        entry.name.endswith(".xcodeproj") for entry in os.scandir(project_root)
+    ):
+        return "xcode"
+    raise ProjectArtifactError("artifact_system_mismatch", "生成目录名称与项目构建系统不匹配")
+
+
 def find_project_root(
     target: str,
     home: str,
@@ -134,7 +182,10 @@ def _git_output(command: list[str]) -> subprocess.CompletedProcess[str]:
 def _validate_git_target(project_root: str, target: str) -> None:
     root_result = _git_output(["git", "-C", project_root, "rev-parse", "--show-toplevel"])
     if root_result.returncode != 0:
-        return
+        raise ProjectArtifactError("git_repository_missing", "项目生成目录必须属于可恢复的 Git 工作区")
+    checkpoint = _git_output(["git", "-C", project_root, "rev-parse", "--verify", "HEAD"])
+    if checkpoint.returncode != 0:
+        raise ProjectArtifactError("git_checkpoint_missing", "Git 工作区尚无可恢复提交，已延期处置")
     git_root = canonical_path(root_result.stdout.strip())
     if not is_within(target, git_root, include_root=False):
         raise ProjectArtifactError("git_scope_mismatch", "目标不在识别出的 Git 工作区内")
@@ -190,8 +241,6 @@ def sys_platform() -> str:
 
 
 def _validate_build_contents(target: str) -> None:
-    if os.path.basename(target) != "build":
-        return
     for root, directories, files in os.walk(target, followlinks=False):
         if any(name in PROTECTED_BUILD_NAMES for name in directories):
             raise ProjectArtifactError("protected_build_output", "build 内含 Archives，必须保留并拆分复核")
@@ -236,6 +285,7 @@ def inspect_project_artifact(
         raise ProjectArtifactError("artifact_name_denied", "目标名称不在项目生成目录 allowlist 中")
     project_root = find_project_root(canonical, home, environment)
     _validate_git_target(project_root, canonical)
+    build_system = _build_system_for(project_root, os.path.basename(canonical))
     _validate_build_contents(canonical)
     activity = inspect_artifact_activity(
         canonical,
@@ -246,6 +296,7 @@ def inspect_project_artifact(
     return {
         "project_root": project_root,
         "artifact_kind": os.path.basename(canonical),
+        "build_system": build_system,
         **activity,
     }
 

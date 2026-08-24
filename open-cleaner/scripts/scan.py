@@ -391,6 +391,7 @@ def scan_current(
     platform: Optional[str] = None,
     max_workers: int = DEFAULT_WORKERS,
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+    custom_roots: Optional[Sequence[str]] = None,
 ) -> dict[str, Any]:
     selected = platform or sys.platform
     if selected != "darwin":
@@ -398,6 +399,8 @@ def scan_current(
     normalized = "darwin"
     home = os.path.abspath(os.path.expanduser("~"))
     targets = macos_targets(home)
+    for root in custom_roots or ():
+        targets.append(ScanTarget("custom_roots", os.path.abspath(os.path.expanduser(root))))
     engine = ScanEngine(normalized, max_workers=max_workers, timeout_seconds=timeout_seconds)
     started = time.monotonic()
     groups, coverage = engine.scan_targets(targets)

@@ -53,6 +53,34 @@
   .block-count { color: var(--muted); font-size: 12px; font-weight: 500; }
   .block-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; margin-left: auto; }
   .section-toggle { min-height: 32px; padding: 5px 10px; }
+  .workspace-tools { display: grid; gap: 12px; padding: 16px; }
+  .workspace-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .workspace-toolbar input, .workspace-toolbar select {
+    min-height: 34px; min-width: 0; padding: 6px 9px; border: 1px solid var(--border);
+    border-radius: 6px; background: #fff; color: var(--text); font: inherit;
+  }
+  .workspace-toolbar .path-input { flex: 1 1 320px; }
+  .root-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+  .root-tab { max-width: 100%; overflow-wrap: anywhere; }
+  .browser-path { padding: 8px 10px; border-radius: 6px; background: #f7f8fa; font: 12px/1.5 ui-monospace, "SFMono-Regular", Consolas, monospace; overflow-wrap: anywhere; }
+  .browser-list { display: grid; gap: 5px; }
+  .browser-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto auto; gap: 9px; align-items: center; min-height: 42px; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  .browser-row:last-child { border-bottom: 0; }
+  .browser-name { min-width: 0; border: 0; padding: 0; background: transparent; color: var(--text); cursor: pointer; text-align: left; overflow-wrap: anywhere; }
+  .browser-name:disabled { cursor: default; }
+  .browser-meta { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .settings-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .settings-panel { min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 6px; }
+  .settings-panel h3 { margin: 0 0 8px; font-size: 14px; }
+  .settings-list { display: grid; gap: 6px; }
+  .settings-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+  .settings-item span { min-width: 0; overflow-wrap: anywhere; font: 12px/1.45 ui-monospace, "SFMono-Regular", Consolas, monospace; }
+  .installer-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+  .installer-item { padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+  .installer-item h3 { margin: 0 0 6px; font-size: 14px; overflow-wrap: anywhere; }
+  .installer-item dl { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 4px 8px; margin: 0; font-size: 12px; }
+  .installer-item dt { color: var(--muted); }
+  .installer-item dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
 
   .surface {
     background: var(--surface);
@@ -328,6 +356,9 @@
     .session-bar .action-button, .batch-actions, .batch-actions .action-button { width: 100%; }
     .batch-actions { display: grid; grid-template-columns: 1fr 1fr; }
     .confirm-actions { display: grid; grid-template-columns: 1fr 1fr; }
+    .settings-columns { grid-template-columns: 1fr; }
+    .browser-row { grid-template-columns: 24px minmax(0, 1fr) auto; }
+    .browser-row .browser-modified { display: none; }
   }
 </style>
 </head>
@@ -397,6 +428,8 @@ const ACTION_INDEX = actionIndex();
 const ACTIONS = new Map((SESSION && SESSION.actions || []).map(action => [action.action_id, action]));
 const SELECTED = new Set();
 let PENDING_ACTIONS = [];
+let LOCAL_SETTINGS = null;
+let BROWSER_STATE = {path: "", selected: new Set()};
 
 function idsFor(paths, mode) {
   const ids = [];
@@ -449,6 +482,102 @@ function sessionSection() {
     ? `<button class="action-button secondary" type="button" id="rescan-button">重新扫描</button>`
     : "";
   return `<section class="block surface session-bar"><div class="session-copy"><div class="session-title">受控清理会话</div><div class="session-detail">${trashCount} 个绿灯目标可处置${reviewedCount ? ` · ${reviewedCount} 个黄灯目标可人工复核` : ""} · 会话有效至 ${h(expires)}</div></div>${rescan}</section>`;
+}
+
+function workspaceSection() {
+  if (!SESSION) return "";
+  return `<section class="block" id="workspace-section"><h2 class="block-title">目录浏览与保护</h2><div class="surface workspace-tools">
+    <div class="root-tabs" id="root-tabs"></div>
+    <div class="workspace-toolbar"><button class="action-button secondary" id="browser-parent" type="button">返回上层</button><input id="browser-search" type="search" placeholder="搜索当前目录"><select id="browser-sort"><option value="name">按名称</option><option value="size">按大小</option><option value="modified">按修改时间</option></select><select id="browser-min-size"><option value="0">全部大小</option><option value="104857600">至少 100 MB</option><option value="1073741824">至少 1 GB</option></select></div>
+    <div class="browser-path" id="browser-path">正在读取本地设置…</div><div class="browser-list" id="browser-list"></div>
+    <div class="workspace-toolbar"><button class="action-button secondary" id="browser-select-all" type="button">全选当前列表</button><button class="action-button primary" id="protect-selected" type="button" disabled>保护所选路径</button><span class="action-state" id="workspace-state" aria-live="polite"></span></div>
+    <div class="settings-columns"><div class="settings-panel"><h3>只读扫描根</h3><div class="settings-list" id="scan-root-list"></div><div class="workspace-toolbar"><input class="path-input" id="scan-root-input" placeholder="输入主目录或 /Volumes 下的目录"><button class="action-button secondary" id="add-scan-root" type="button">添加</button></div></div><div class="settings-panel"><h3>永久保护</h3><div class="settings-list" id="protected-list"></div><div class="workspace-toolbar"><input class="path-input" id="protected-app-input" placeholder="Bundle ID、App 名称或 .app 路径"><button class="action-button secondary" id="add-protected-app" type="button">保护 App</button></div></div></div>
+  </div></section>`;
+}
+
+async function getJson(endpoint) {
+  const response = await fetch(endpoint, {headers: {"X-OpenCleaner-Token": SESSION.token}});
+  let result = {};
+  try { result = await response.json(); } catch (_error) { result = {}; }
+  if (!response.ok || !result.ok) throw new Error(result.error || `请求失败（${response.status}）`);
+  return result;
+}
+
+function settingsItem(value, kind, removable = true) {
+  return `<div class="settings-item"><span>${h(value)}</span>${removable ? `<button class="action-button secondary remove-setting" type="button" data-kind="${h(kind)}" data-value="${h(value)}">移除</button>` : ""}</div>`;
+}
+
+function renderSettings() {
+  if (!LOCAL_SETTINGS) return;
+  document.getElementById("root-tabs").innerHTML = LOCAL_SETTINGS.scan_roots.map(root => `<button class="action-button secondary root-tab" type="button" data-browse-path="${h(root)}">${h(root)}</button>`).join("");
+  document.getElementById("scan-root-list").innerHTML = LOCAL_SETTINGS.scan_roots.map(root => settingsItem(root, "scan_roots", LOCAL_SETTINGS.scan_roots.length > 1)).join("");
+  const protectedItems = [
+    ...LOCAL_SETTINGS.protected_paths.map(value => settingsItem(value, "protected_paths")),
+    ...LOCAL_SETTINGS.protected_apps.map(value => settingsItem(value, "protected_apps"))
+  ];
+  document.getElementById("protected-list").innerHTML = protectedItems.join("") || `<span class="action-help">尚未设置保护路径或 App</span>`;
+}
+
+async function saveSettings(next) {
+  const state = document.getElementById("workspace-state");
+  state.textContent = "正在保存并重新生成操作计划…";
+  try {
+    await postJson(SESSION.settings_endpoint, {token: SESSION.token, plan_id: SESSION.plan_id, settings: next});
+    window.location.reload();
+  } catch (error) {
+    state.textContent = `保存失败：${error && error.message ? error.message : error}`;
+    state.className = "action-state error";
+  }
+}
+
+function renderBrowser(result) {
+  BROWSER_STATE.path = result.path;
+  BROWSER_STATE.parent = result.parent;
+  BROWSER_STATE.selected.clear();
+  document.getElementById("browser-path").textContent = `${result.path}${result.truncated ? " · 仅显示前 250 项" : ""}`;
+  document.getElementById("browser-parent").disabled = !result.parent;
+  document.getElementById("browser-list").innerHTML = result.items.map(item => `<div class="browser-row"><input class="browser-select" type="checkbox" data-path="${h(item.path)}"><button class="browser-name" type="button" ${item.kind === "directory" ? `data-browse-path="${h(item.path)}"` : "disabled"}>${item.kind === "directory" ? "目录" : "文件"} · ${h(item.name)}${item.protected ? " · 已保护" : ""}</button><span class="browser-meta">${item.size_bytes == null ? "大小未知" : bytesLabel(item.size_bytes).replace(/^\+/, "")}</span><span class="browser-meta browser-modified">${h(new Date(item.modified_at).toLocaleString())}</span></div>`).join("") || `<div class="action-help">当前筛选下没有条目</div>`;
+  updateProtectSelection();
+}
+
+async function browsePath(path) {
+  const query = new URLSearchParams({
+    path,
+    search: document.getElementById("browser-search").value,
+    sort: document.getElementById("browser-sort").value,
+    min_size_bytes: document.getElementById("browser-min-size").value
+  });
+  const state = document.getElementById("workspace-state");
+  state.textContent = "正在读取目录…";
+  try {
+    const result = await getJson(`${SESSION.browse_endpoint}?${query}`);
+    renderBrowser(result);
+    state.textContent = "只读浏览，不会授予删除权限";
+    state.className = "action-state ok";
+  } catch (error) {
+    state.textContent = `读取失败：${error && error.message ? error.message : error}`;
+    state.className = "action-state error";
+  }
+}
+
+function updateProtectSelection() {
+  const button = document.getElementById("protect-selected");
+  if (button) {
+    button.disabled = BROWSER_STATE.selected.size === 0;
+    button.textContent = BROWSER_STATE.selected.size ? `保护所选路径（${BROWSER_STATE.selected.size}）` : "保护所选路径";
+  }
+}
+
+async function initializeWorkspace() {
+  if (!SESSION) return;
+  try {
+    const result = await getJson(SESSION.settings_endpoint);
+    LOCAL_SETTINGS = result.settings;
+    renderSettings();
+    await browsePath(LOCAL_SETTINGS.scan_roots[0]);
+  } catch (error) {
+    document.getElementById("workspace-state").textContent = `初始化失败：${error && error.message ? error.message : error}`;
+  }
 }
 
 function segments(system, summary) {
@@ -608,17 +737,56 @@ function decisionBasis(item, tier) {
 function findingBody(item, tier) {
   const verdict = disposition(item, tier);
   const summary = `<div class="disposal-verdict ${h(verdict.tone)}"><b>${h(verdict.title)}</b><span>${h(verdict.explanation)}</span></div>${detail("归属应用 / 工具", h(ownerName(item, tier)))}${detail("主要作用", h(purposeText(item, tier)))}${detail("判断依据", h(decisionBasis(item, tier)))}`;
+  const owner = ownershipPanel(item);
+  const project = projectArtifactPanel(item);
+  const protection = protectionPanel(item);
   if (tier === "green") {
     const processes = item.kill_processes && item.kill_processes.length ? item.kill_processes.map(value => `<span class="tag">${h(value)}</span>`).join("") : `<span class="action-help">无需关闭任何进程</span>`;
     const exclusions = item.rule_non_targets && item.rule_non_targets.length
       ? `<ul>${item.rule_non_targets.map(value => `<li>${h(value)}</li>`).join("")}</ul>`
       : `<span class="action-help">未提供</span>`;
-    return `${summary}${detail("规则风险", h(item.rule_risk || "首次使用时可能需要重建缓存。"))}${detail("不在规则范围内", exclusions)}${detail("清理前需关闭", processes)}${detail("可选命令（自行确认后执行）", commandBlocks(item.commands))}${actionPanel(item, tier)}`;
+    return `${summary}${owner}${detail("规则风险", h(item.rule_risk || "首次使用时可能需要重建缓存。"))}${detail("不在规则范围内", exclusions)}${detail("清理前需关闭", processes)}${detail("可选命令（自行确认后执行）", commandBlocks(item.commands))}${actionPanel(item, tier)}${protection}`;
   }
   if (tier === "yellow") {
-    return `${summary}${detail("建议处理方式", h(item.disposal))}${item.risk ? `<div class="risk-note">${h(item.risk)}</div>` : ""}${actionPanel(item, tier)}`;
+    return `${summary}${owner}${project}${detail("建议处理方式", h(item.disposal))}${item.risk ? `<div class="risk-note">${h(item.risk)}</div>` : ""}${actionPanel(item, tier)}${protection}`;
   }
-  return `${summary}${detail("卸载 / 释放建议", h(item.indirect_release))}${item.auto_reclaim ? detail("是否自动回收", h(item.auto_reclaim)) : ""}${actionPanel(item, tier)}`;
+  return `${summary}${owner}${detail("卸载 / 释放建议", h(item.indirect_release))}${item.auto_reclaim ? detail("是否自动回收", h(item.auto_reclaim)) : ""}${actionPanel(item, tier)}${protection}`;
+}
+
+function projectArtifactPanel(item) {
+  const project = item.project_artifact;
+  if (!project) return "";
+  return detail(
+    "项目产物证据",
+    `构建系统：${h(project.build_system)}<br>生成物：${h(project.artifact_kind)}<br>项目根：${h(project.project_root)}<br>静置门槛：${h(Math.round(project.idle_seconds / 60))} 分钟`
+  );
+}
+
+function ownershipPanel(item) {
+  const owner = item.ownership;
+  if (!owner) return "";
+  const rows = [
+    owner.display_name ? `<b>${h(owner.display_name)}</b>` : "",
+    owner.bundle_id ? `Bundle ID：${h(owner.bundle_id)}` : "",
+    owner.relationships && owner.relationships.length ? `关系：${owner.relationships.map(h).join("、")}` : "",
+    owner.app_paths && owner.app_paths.length ? `应用：${owner.app_paths.map(h).join("、")}` : "",
+    owner.login_items && owner.login_items.length ? `登录项：${owner.login_items.map(h).join("、")}` : "",
+    owner.background_processes && owner.background_processes.length ? `后台项：${owner.background_processes.map(h).join("、")}` : "",
+    owner.multiple_versions ? "检测到多个 App 版本，服务端会阻止处置。" : ""
+  ].filter(Boolean);
+  return detail("App 归属解析", rows.join("<br>"));
+}
+
+function protectionPanel(item) {
+  if (!SESSION) return "";
+  const owner = item.ownership || {};
+  const app = owner.bundle_id || owner.display_name || "";
+  return `<div class="detail"><div class="detail-title">永久保护</div><div class="action-row"><button class="action-button secondary protect-value" type="button" data-kind="protected_paths" data-value="${h(item.path)}">保护此路径</button>${app ? `<button class="action-button secondary protect-value" type="button" data-kind="protected_apps" data-value="${h(app)}">保护所属 App</button>` : ""}<span class="action-state">保护只会降权和阻止处置，不会授予删除权限。</span></div></div>`;
+}
+
+function installerSection(items) {
+  if (!items || !items.length) return "";
+  return `<section class="block"><h2 class="block-title">安装包专项视图 <span class="block-count">${items.length} 项</span></h2><div class="installer-grid">${items.map(item => `<article class="installer-item"><h3>${h(item.format)} · ${h(item.name)}</h3><dl><dt>大小</dt><dd>${h(bytesLabel(item.size_bytes).replace(/^\+/, ""))}</dd><dt>安装状态</dt><dd>${h(item.installed_state)}</dd><dt>来源</dt><dd>${h(item.source || "未读取到下载来源")}</dd><dt>最后使用</dt><dd>${h(new Date(item.last_used_at).toLocaleString())}</dd><dt>唯一副本</dt><dd>${h(item.unique_copy_risk)}</dd><dt>路径</dt><dd>${h(item.path)}</dd></dl></article>`).join("")}</div></section>`;
 }
 
 function detail(label, content) {
@@ -861,17 +1029,55 @@ function mount() {
   const summary = REPORT.summary || {};
   document.getElementById("report-content").innerHTML = sessionSection()
     + overview(REPORT.system || {}, summary)
+    + workspaceSection()
     + topFive(REPORT.top5)
     + listBlock("执行建议", Array.isArray(summary.priority) ? summary.priority : [], summary.overview)
+    + installerSection(REPORT.installer_packages || [])
     + findingsSection("可自动清理（纯缓存 / 临时文件，可再生）", REPORT.green, "green")
     + findingsSection("需你参与的手动清理（含用户数据）", REPORT.yellow, "yellow")
     + findingsSection("谨慎清理（建议使用正规卸载或系统入口）", REPORT.red, "red")
     + permissions(REPORT.denied)
     + historySection()
     + listBlock("长期优化建议", summary.long_term || [], "");
+  initializeWorkspace();
 }
 
 document.addEventListener("click", event => {
+  const browse = event.target.closest("[data-browse-path]");
+  if (browse) { browsePath(browse.dataset.browsePath); return; }
+  if (event.target.closest("#browser-parent")) { if (BROWSER_STATE.parent) browsePath(BROWSER_STATE.parent); return; }
+  if (event.target.closest("#browser-select-all")) {
+    document.querySelectorAll(".browser-select").forEach(input => { input.checked = true; BROWSER_STATE.selected.add(input.dataset.path); });
+    updateProtectSelection(); return;
+  }
+  if (event.target.closest("#protect-selected")) {
+    const next = {...LOCAL_SETTINGS, protected_paths: [...new Set([...LOCAL_SETTINGS.protected_paths, ...BROWSER_STATE.selected])]};
+    saveSettings(next); return;
+  }
+  const protect = event.target.closest(".protect-value");
+  if (protect && LOCAL_SETTINGS) {
+    const kind = protect.dataset.kind;
+    const next = {...LOCAL_SETTINGS, [kind]: [...new Set([...LOCAL_SETTINGS[kind], protect.dataset.value])]};
+    saveSettings(next); return;
+  }
+  const remove = event.target.closest(".remove-setting");
+  if (remove && LOCAL_SETTINGS) {
+    const kind = remove.dataset.kind;
+    const next = {...LOCAL_SETTINGS, [kind]: LOCAL_SETTINGS[kind].filter(value => value !== remove.dataset.value)};
+    saveSettings(next); return;
+  }
+  if (event.target.closest("#add-scan-root") && LOCAL_SETTINGS) {
+    const input = document.getElementById("scan-root-input");
+    const value = input.value.trim();
+    if (value) saveSettings({...LOCAL_SETTINGS, scan_roots: [...new Set([...LOCAL_SETTINGS.scan_roots, value])]});
+    return;
+  }
+  if (event.target.closest("#add-protected-app") && LOCAL_SETTINGS) {
+    const input = document.getElementById("protected-app-input");
+    const value = input.value.trim();
+    if (value) saveSettings({...LOCAL_SETTINGS, protected_apps: [...new Set([...LOCAL_SETTINGS.protected_apps, value])]});
+    return;
+  }
   const sectionToggle = event.target.closest(".section-toggle");
   if (sectionToggle) {
     const section = sectionToggle.closest(".findings-section");
@@ -910,9 +1116,23 @@ document.addEventListener("click", event => {
 });
 
 document.addEventListener("change", event => {
+  const browserSelect = event.target.closest(".browser-select");
+  if (browserSelect) {
+    browserSelect.checked ? BROWSER_STATE.selected.add(browserSelect.dataset.path) : BROWSER_STATE.selected.delete(browserSelect.dataset.path);
+    updateProtectSelection(); return;
+  }
+  if (event.target.closest("#browser-sort") || event.target.closest("#browser-min-size")) {
+    if (BROWSER_STATE.path) browsePath(BROWSER_STATE.path); return;
+  }
   const input = event.target.closest(".action-select");
   if (!input) return;
   setSelected(input.dataset.actionIds.split(",").filter(Boolean), input.checked);
+});
+
+document.addEventListener("input", event => {
+  if (event.target.id !== "browser-search" || !BROWSER_STATE.path) return;
+  window.clearTimeout(BROWSER_STATE.searchTimer);
+  BROWSER_STATE.searchTimer = window.setTimeout(() => browsePath(BROWSER_STATE.path), 220);
 });
 
 document.getElementById("batch-clear").addEventListener("click", () => setSelected([...SELECTED], false));

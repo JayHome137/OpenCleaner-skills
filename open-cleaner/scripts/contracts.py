@@ -101,6 +101,24 @@ def _validate_runtime(value: Any, label: str, live_state: bool) -> None:
             raise ContractError(f"{label}.state 无效")
 
 
+def _validate_ownership(value: Any, label: str) -> None:
+    _require_type(value, dict, label)
+    _require_keys(
+        value,
+        (
+            "bundle_id", "display_name", "app_paths", "relationships",
+            "login_items", "background_processes", "shared_bundle_id", "multiple_versions",
+        ),
+        label,
+    )
+    for key in ("bundle_id", "display_name"):
+        _require_type(value[key], str, f"{label}.{key}")
+    for key in ("app_paths", "relationships", "login_items", "background_processes"):
+        _require_string_list(value[key], f"{label}.{key}")
+    for key in ("shared_bundle_id", "multiple_versions"):
+        _require_type(value[key], bool, f"{label}.{key}")
+
+
 def validate_scan_result(data: dict[str, Any]) -> dict[str, Any]:
     _require_keys(
         data,
@@ -230,6 +248,10 @@ def validate_analysis(data: dict[str, Any]) -> dict[str, Any]:
                 _require_string_list(item["app_paths"], f"{label}.app_paths")
             if "runtime" in item:
                 _validate_runtime(item["runtime"], f"{label}.runtime", live_state=False)
+            if "ownership" in item:
+                _validate_ownership(item["ownership"], f"{label}.ownership")
+            if "protected" in item:
+                _require_type(item["protected"], bool, f"{label}.protected")
             if "stage_status" in item:
                 stage = item["stage_status"]
                 _require_type(stage, dict, f"{label}.stage_status")
@@ -239,6 +261,22 @@ def validate_analysis(data: dict[str, Any]) -> dict[str, Any]:
                 _require_type(stage["code"], str, f"{label}.stage_status.code")
                 if stage["state"] == "ready" and not item.get("reviewed_trash_paths"):
                     raise ContractError(f"{label} ready 项必须包含 reviewed_trash_paths")
+            if "project_artifact" in item:
+                project = item["project_artifact"]
+                _require_type(project, dict, f"{label}.project_artifact")
+                _require_keys(
+                    project,
+                    ("project_root", "artifact_kind", "build_system", "idle_seconds", "latest_mtime_ns"),
+                    f"{label}.project_artifact",
+                )
+                for field in ("project_root", "artifact_kind", "build_system"):
+                    _require_type(project[field], str, f"{label}.project_artifact.{field}")
+                for field in ("idle_seconds", "latest_mtime_ns"):
+                    value = project[field]
+                    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                        raise ContractError(f"{label}.project_artifact.{field} 必须是非负整数")
+                if project["idle_seconds"] < MIN_PROJECT_IDLE_SECONDS:
+                    raise ContractError(f"{label}.project_artifact.idle_seconds 不能少于 1800 秒")
     _require_type(data["summary"], dict, "summary")
     _require_keys(
         data["summary"],
@@ -254,6 +292,22 @@ def validate_analysis(data: dict[str, Any]) -> dict[str, Any]:
         _require_type(data["summary"]["tier_stats"][key], str, f"summary.tier_stats.{key}")
     if "denied" in data:
         _require_string_list(data["denied"], "denied")
+    if "installer_packages" in data:
+        _require_type(data["installer_packages"], list, "installer_packages")
+        required = (
+            "name", "path", "format", "size_bytes", "installed_state", "installed_apps",
+            "source", "last_used_at", "unique_copy_risk", "duplicates",
+        )
+        for index, item in enumerate(data["installer_packages"]):
+            label = f"installer_packages[{index}]"
+            _require_type(item, dict, label)
+            _require_keys(item, required, label)
+            for key in ("name", "path", "format", "installed_state", "source", "last_used_at", "unique_copy_risk"):
+                _require_type(item[key], str, f"{label}.{key}")
+            for key in ("installed_apps", "duplicates"):
+                _require_string_list(item[key], f"{label}.{key}")
+            if isinstance(item["size_bytes"], bool) or not isinstance(item["size_bytes"], int) or item["size_bytes"] < 0:
+                raise ContractError(f"{label}.size_bytes 必须是非负整数")
     origin = data.get("analysis_origin")
     if origin is not None and origin not in ("deterministic-draft", "project-stage"):
         raise ContractError("analysis_origin 无效")

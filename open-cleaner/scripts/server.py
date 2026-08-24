@@ -11,6 +11,7 @@ mutating modes only move an authorized path to the macOS Trash.
 from __future__ import annotations
 
 import json
+import os
 import secrets
 import sys
 import threading
@@ -19,6 +20,7 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
+from urllib.parse import parse_qs, urlsplit
 
 HERE = Path(__file__).resolve().parent
 TEMPLATE = HERE.parent / "assets" / "report_template.html"
@@ -39,6 +41,8 @@ from contracts import (  # noqa: E402
 )
 from file_ops import FileOperator, OperationLog  # noqa: E402
 from policy import PolicyError, SafetyPolicy, build_action_plan, ensure_plan_fresh  # noqa: E402
+from browse import browse_directory  # noqa: E402
+from settings import SettingsError, SettingsStore  # noqa: E402
 
 
 def configure_text_output() -> None:
@@ -57,6 +61,7 @@ class ServerContext:
         operator: Optional[FileOperator] = None,
         token: Optional[str] = None,
         rescan_handler: Optional[Callable[[], dict[str, Any]]] = None,
+        settings_store: Optional[SettingsStore] = None,
     ) -> None:
         self.analysis = validate_analysis(analysis)
         validate_action_plan(plan)
@@ -70,6 +75,7 @@ class ServerContext:
         self.operator = operator or FileOperator(policy, OperationLog())
         self.token = token or secrets.token_urlsafe(32)
         self.rescan_handler = rescan_handler
+        self.settings_store = settings_store or policy.settings_store
         self.actions = {action["action_id"]: action for action in plan["actions"]}
         self.completed: set[str] = set()
         self.review_tokens: dict[str, dict[str, Any]] = {}
@@ -83,6 +89,8 @@ class ServerContext:
                 action["mode"] == "reviewed_trash" for action in self.plan["actions"]
             ) else "",
             "rescan_endpoint": "/rescan" if self.rescan_handler else "",
+            "browse_endpoint": "/browse",
+            "settings_endpoint": "/settings",
             "plan_id": self.plan["plan_id"],
             "expires_at": self.plan["expires_at"],
             "rejected": [
@@ -105,6 +113,50 @@ class ServerContext:
             ],
         }
 
+    def settings(self) -> dict[str, Any]:
+        return self.settings_store.load()
+
+    def browse(self, parameters: Mapping[str, list[str]]) -> dict[str, Any]:
+        allowed = {"path", "search", "sort", "descending", "min_size_bytes"}
+        if set(parameters) - allowed:
+            raise SettingsError("unknown_browse_field", "目录浏览请求包含未知字段")
+        path = (parameters.get("path") or [""])[0]
+        if not path:
+            raise SettingsError("browse_path_required", "目录浏览缺少 path")
+        try:
+            minimum = int((parameters.get("min_size_bytes") or ["0"])[0])
+        except ValueError as exc:
+            raise SettingsError("invalid_size_filter", "大小筛选必须是整数") from exc
+        return browse_directory(
+            self.settings_store,
+            path,
+            search=(parameters.get("search") or [""])[0],
+            sort=(parameters.get("sort") or ["name"])[0],
+            descending=(parameters.get("descending") or ["false"])[0].casefold() == "true",
+            min_size_bytes=minimum,
+        )
+
+    def update_settings(self, value: Mapping[str, Any]) -> dict[str, Any]:
+        saved = self.settings_store.save(value)
+        refreshed = validate_analysis(
+            self.rescan_handler() if self.rescan_handler is not None else self.analysis
+        )
+        refreshed_plan = build_action_plan(
+            refreshed,
+            home=self.policy.home,
+            platform=self.policy.platform,
+            environment=self.policy.environment,
+            purpose="session",
+            runtime_inspector=self.policy.runtime_inspector,
+            settings_store=self.settings_store,
+        )
+        self.analysis = refreshed
+        self.plan = refreshed_plan
+        self.actions = {action["action_id"]: action for action in refreshed_plan["actions"]}
+        self.completed.clear()
+        self.review_tokens.clear()
+        return {"ok": True, "settings": saved, "plan_id": refreshed_plan["plan_id"]}
+
     def rescan(self) -> dict[str, Any]:
         if self.rescan_handler is None:
             raise PolicyError("rescan_unavailable", "当前报告不支持重新扫描")
@@ -116,6 +168,7 @@ class ServerContext:
             environment=self.policy.environment,
             purpose="session",
             runtime_inspector=self.policy.runtime_inspector,
+            settings_store=self.settings_store,
         )
         self.analysis = refreshed
         self.plan = refreshed_plan
@@ -156,6 +209,7 @@ class ServerContext:
         actions = self._resolve_actions(action_ids)
         if any(action["mode"] != "reviewed_trash" for action in actions):
             raise PolicyError("review_mode_required", "复核令牌只能签发给黄灯人工复核动作")
+        self.policy.runtime_inspector.refresh_open_file_snapshot()
         for action in actions:
             self.policy.revalidate(action)
         review_token = secrets.token_urlsafe(32)
@@ -198,6 +252,7 @@ class ServerContext:
             raise PolicyError("unexpected_review_token", "普通动作不能携带黄灯复核令牌")
 
         # Validate the full batch before the first side effect.
+        self.policy.runtime_inspector.refresh_open_file_snapshot()
         for action in actions:
             self.policy.revalidate(action)
         if token_record is not None:
@@ -238,7 +293,18 @@ def create_context(
     analysis = load_json_object(analysis_path)
     validate_analysis(analysis)
     template = TEMPLATE.read_text(encoding="utf-8")
-    policy = SafetyPolicy(home=home, platform=platform, environment=environment)
+    normalized_home = os.path.abspath(os.path.expanduser(home or "~"))
+    settings_store = SettingsStore(
+        normalized_home,
+        environment,
+        state_dir=state_dir,
+    )
+    policy = SafetyPolicy(
+        home=home,
+        platform=platform,
+        environment=environment,
+        settings_store=settings_store,
+    )
     plan = build_action_plan(
         analysis,
         home=policy.home,
@@ -246,22 +312,36 @@ def create_context(
         environment=policy.environment,
         purpose="session",
         runtime_inspector=policy.runtime_inspector,
+        settings_store=settings_store,
     )
     operator = FileOperator(policy, OperationLog(state_dir))
 
     def rescan_current() -> dict[str, Any]:
+        roots = [
+            root
+            for root in settings_store.load()["scan_roots"]
+            if os.path.normcase(root) != os.path.normcase(policy.home)
+        ]
         if analysis.get("analysis_origin") == "project-stage":
             from project_stage import build_project_stage_analysis
 
+            project_options: dict[str, Any] = {}
+            if roots:
+                project_options["custom_roots"] = roots
             return build_project_stage_analysis(
                 environment=policy.environment,
                 min_kb=int(analysis["project_stage"].get("min_kb", 50 * 1024)),
+                **project_options,
             )
         from classify import build_analysis
         from scan import scan_current
 
-        scan_result = scan_current(platform=policy.platform)
-        return build_analysis(scan_result, environment=policy.environment)
+        scan_result = scan_current(platform=policy.platform, custom_roots=roots)
+        return build_analysis(
+            scan_result,
+            environment=policy.environment,
+            settings_store=settings_store,
+        )
 
     return ServerContext(
         analysis,
@@ -270,6 +350,7 @@ def create_context(
         plan,
         operator=operator,
         rescan_handler=rescan_current,
+        settings_store=settings_store,
     )
 
 
@@ -303,16 +384,33 @@ def make_handler(context: ServerContext) -> type[BaseHTTPRequestHandler]:
             return host in ("127.0.0.1", "localhost")
 
         def do_GET(self) -> None:
-            if self.path not in ("/", "/index.html"):
+            parsed = urlsplit(self.path)
+            if parsed.path not in ("/", "/index.html", "/browse", "/settings"):
                 self._send(404, "not found", "text/plain; charset=utf-8")
                 return
             if not self._host_allowed():
                 self._send(403, {"ok": False, "error": "Host 不被允许"})
                 return
-            self._send(200, context.render(), "text/html; charset=utf-8")
+            if parsed.path in ("/", "/index.html"):
+                self._send(200, context.render(), "text/html; charset=utf-8")
+                return
+            if not secrets.compare_digest(
+                self.headers.get("X-OpenCleaner-Token", ""), context.token
+            ):
+                self._send(403, {"ok": False, "error": "访问令牌无效"})
+                return
+            try:
+                if parsed.path == "/settings":
+                    response = {"ok": True, "settings": context.settings()}
+                else:
+                    response = {"ok": True, **context.browse(parse_qs(parsed.query, keep_blank_values=True))}
+            except (PolicyError, SettingsError, OSError, ValueError) as exc:
+                self._send(400, {"ok": False, "error": str(exc), "code": getattr(exc, "code", "request_failed")})
+                return
+            self._send(200, response)
 
         def do_POST(self) -> None:
-            if self.path not in ("/action", "/review", "/rescan"):
+            if self.path not in ("/action", "/review", "/rescan", "/settings"):
                 self._send(404, {"ok": False, "error": "not found"})
                 return
             if not self._host_allowed():
@@ -340,6 +438,8 @@ def make_handler(context: ServerContext) -> type[BaseHTTPRequestHandler]:
                 )
             elif self.path == "/review":
                 expected_fields = ({"token", "plan_id", "action_ids"},)
+            elif self.path == "/settings":
+                expected_fields = ({"token", "plan_id", "settings"},)
             else:
                 expected_fields = ({"token", "plan_id"},)
             if not isinstance(request, dict) or set(request) not in expected_fields:
@@ -355,6 +455,12 @@ def make_handler(context: ServerContext) -> type[BaseHTTPRequestHandler]:
                 with context.lock:
                     if self.path == "/rescan":
                         response = context.rescan()
+                    elif self.path == "/settings":
+                        value = request.get("settings")
+                        if not isinstance(value, dict):
+                            self._send(400, {"ok": False, "error": "settings 格式无效"})
+                            return
+                        response = context.update_settings(value)
                     else:
                         action_ids = request.get("action_ids")
                         if not isinstance(action_ids, list) or any(
@@ -370,8 +476,8 @@ def make_handler(context: ServerContext) -> type[BaseHTTPRequestHandler]:
                                 self._send(400, {"ok": False, "error": "review_token 格式无效"})
                                 return
                             response = context.execute(action_ids, review_token=review_token)
-            except (ContractError, PolicyError, OSError, ValueError) as exc:
-                if not isinstance(exc, PolicyError):
+            except (ContractError, PolicyError, SettingsError, OSError, ValueError) as exc:
+                if not isinstance(exc, (PolicyError, SettingsError)):
                     label = "重新扫描失败" if self.path == "/rescan" else "请求处理失败"
                     self._send(500, {"ok": False, "error": f"{label}：{exc}"})
                     return

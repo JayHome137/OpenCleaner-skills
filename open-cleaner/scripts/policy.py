@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import secrets
 import stat
+import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -18,6 +19,8 @@ from project_artifacts import (
 )
 from rules import RuleCatalog, RuleError, canonical_path, is_within, normalized_platform
 from runtime import RuntimeInspector
+from ownership import installed_apps, resolve_ownership
+from settings import SettingsStore
 
 PLAN_TTL_MINUTES = 30
 MAX_PLAN_ACTIONS = 200
@@ -170,6 +173,33 @@ def owner_matches_current_user(path: str, platform: str) -> bool:
         return False
 
 
+def sqlite_live_set(path: str) -> Optional[bool]:
+    """Return true when a target contains a SQLite database with live sidecars."""
+    if os.path.isfile(path):
+        lowered = path.casefold()
+        if lowered.endswith("-wal") or lowered.endswith("-shm"):
+            return True
+        return any(os.path.exists(path + suffix) for suffix in ("-wal", "-shm"))
+    if not os.path.isdir(path):
+        return False
+    try:
+        result = subprocess.run(
+            [
+                "/usr/bin/find", path, "-type", "f", "(",
+                "-name", "*-wal", "-o", "-name", "*-shm", ")", "-print", "-quit",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=8,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    return bool(result.stdout.strip())
+
+
 class SafetyPolicy:
     def __init__(
         self,
@@ -178,6 +208,7 @@ class SafetyPolicy:
         environment: Optional[Mapping[str, str]] = None,
         catalog: Optional[RuleCatalog] = None,
         runtime_inspector: Optional[RuntimeInspector] = None,
+        settings_store: Optional[SettingsStore] = None,
     ) -> None:
         self.platform = normalized_platform(platform)
         self.home_input = os.path.abspath(os.path.expanduser(home or "~"))
@@ -186,6 +217,11 @@ class SafetyPolicy:
         self.environment["HOME"] = self.home
         self.catalog = catalog or RuleCatalog(self.platform, self.environment)
         self.runtime_inspector = runtime_inspector or RuntimeInspector(self.platform)
+        self.settings_store = settings_store or SettingsStore(
+            self.home,
+            self.environment,
+        )
+        self._ownership_apps: Optional[list[dict[str, str]]] = None
 
     def _reject_user_symlink_components(self, original: str) -> None:
         if not is_within(original, self.home_input):
@@ -256,6 +292,8 @@ class SafetyPolicy:
         trash_root = canonical_path(os.path.join(self.home, ".Trash"))
         if is_within(path, trash_root):
             raise PolicyError("trash_root", f"拒绝再次操作废纸篓内容：{path}")
+        if mode in MUTATING_MODES and self.settings_store.is_path_protected(path):
+            raise PolicyError("user_protected", "目标已加入永久保护列表，不会建议或执行处置")
 
     def _authorize_open(self, path: str) -> None:
         allowed = is_within(path, self.home, include_root=False)
@@ -395,6 +433,30 @@ class SafetyPolicy:
             "parent_identity": parent_identity,
         }
         if mode in MUTATING_MODES:
+            if self._ownership_apps is None:
+                self._ownership_apps = installed_apps(self.home)
+            ownership = resolve_ownership(
+                target,
+                self.home,
+                apps=self._ownership_apps,
+                launch_agents=[],
+            )
+            if self.settings_store.is_app_protected(ownership):
+                raise PolicyError("app_protected", "所属 App 已加入永久保护列表")
+            if ownership.get("shared_bundle_id") or ownership.get("multiple_versions"):
+                raise PolicyError("shared_app_identity", "检测到共享 Bundle ID 或多个 App 版本，已阻止处置")
+            if ownership.get("bundle_id") or ownership.get("app_paths"):
+                result["ownership"] = ownership
+            sqlite_state = sqlite_live_set(target)
+            if sqlite_state is True:
+                raise PolicyError("sqlite_live_set", "检测到 SQLite WAL/SHM 活动文件集，已阻止处置")
+            if sqlite_state is None:
+                raise PolicyError("sqlite_state_unknown", "无法确认 SQLite 运行态，已阻止处置")
+            opened = self.runtime_inspector.inspect_open_files(target)
+            if opened is True:
+                raise PolicyError("open_files", "目标或其后代仍有打开文件，已阻止处置")
+            if opened is None:
+                raise PolicyError("open_files_unknown", "无法确认目标是否有打开文件，已阻止处置")
             runtime = self.runtime_inspector.inspect(target, rule_id)
             if runtime:
                 if runtime["state"] == "active":
@@ -461,6 +523,7 @@ def build_action_plan(
     now: Optional[datetime] = None,
     purpose: str = "dry-run",
     runtime_inspector: Optional[RuntimeInspector] = None,
+    settings_store: Optional[SettingsStore] = None,
 ) -> dict[str, Any]:
     validate_analysis(analysis)
     if purpose not in ("dry-run", "session"):
@@ -470,6 +533,7 @@ def build_action_plan(
         platform=platform,
         environment=environment,
         runtime_inspector=runtime_inspector,
+        settings_store=settings_store,
     )
     try:
         analysis_home = canonical_path(str(analysis["system"]["home"]))
@@ -481,6 +545,7 @@ def build_action_plan(
     actions: list[dict[str, Any]] = []
     rejected: list[dict[str, str]] = []
     seen: set[tuple[str, str]] = set()
+    policy.runtime_inspector.refresh_open_file_snapshot()
     for mode, path, tier, rule_id, name in _iter_requested_actions(analysis):
         if len(actions) >= MAX_PLAN_ACTIONS:
             rejected.append({"path": path, "mode": mode, "code": "plan_limit", "message": "操作计划数量超过上限"})
@@ -497,6 +562,7 @@ def build_action_plan(
         action["action_id"] = secrets.token_urlsafe(18)
         action["name"] = name
         actions.append(action)
+    policy.runtime_inspector.clear_open_file_snapshot()
     plan = {
         "schema_version": ACTION_PLAN_SCHEMA_VERSION,
         "purpose": purpose,

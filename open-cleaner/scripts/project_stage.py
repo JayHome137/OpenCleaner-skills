@@ -88,12 +88,13 @@ def augment_with_project_artifacts(
             "risk": "后续首次构建会变慢；若恢复契约或项目状态变化，本次计划会被拒绝。",
         }
         try:
-            inspect_project_artifact(path, home, env)
+            metadata = inspect_project_artifact(path, home, env)
         except ProjectArtifactError as exc:
             card["why_manual"] = f"当前不可处置：{exc}"
             card["stage_status"] = {"state": "deferred", "code": exc.code}
         else:
             card["reviewed_trash_paths"] = [path]
+            card["project_artifact"] = metadata
             card["stage_status"] = {"state": "ready", "code": "stage_ready"}
             actionable += 1
             actionable_kb += size_kb
@@ -124,8 +125,13 @@ def build_project_stage_analysis(
     min_kb: int = DEFAULT_MIN_KB,
     max_workers: int = 4,
     timeout_seconds: int = 120,
+    custom_roots: Optional[list[str]] = None,
 ) -> dict[str, Any]:
-    scan = scan_current(max_workers=max_workers, timeout_seconds=timeout_seconds)
+    scan = scan_current(
+        max_workers=max_workers,
+        timeout_seconds=timeout_seconds,
+        custom_roots=custom_roots,
+    )
     analysis = build_analysis(scan, environment=environment)
     return augment_with_project_artifacts(analysis, environment=environment, min_kb=min_kb)
 

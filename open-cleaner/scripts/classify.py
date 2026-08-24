@@ -22,6 +22,9 @@ from contracts import (  # noqa: E402
 )
 from rules import RuleCatalog, RuleError, canonical_path  # noqa: E402
 from runtime import owner_profile  # noqa: E402
+from installers import collect_installers  # noqa: E402
+from ownership import installed_apps, launch_items, resolve_ownership  # noqa: E402
+from settings import SettingsStore  # noqa: E402
 
 
 def platform_from_scan(scan: Mapping[str, Any]) -> str:
@@ -40,6 +43,8 @@ def item_type(group: str) -> str:
         return "应用本体"
     if group in ("downloads",):
         return "下载内容"
+    if group == "custom_roots":
+        return "自定义扫描根内容"
     if group in ("dev_caches", "caches", "temp"):
         return "开发或应用缓存"
     if group in ("containers", "group_containers", "app_support"):
@@ -132,13 +137,17 @@ def make_red(item: Mapping[str, Any]) -> dict[str, Any]:
 def build_analysis(
     scan: dict[str, Any],
     environment: Optional[Mapping[str, str]] = None,
+    settings_store: Optional[SettingsStore] = None,
 ) -> dict[str, Any]:
     validate_scan_result(scan)
     platform = platform_from_scan(scan)
     env = dict(os.environ if environment is None else environment)
     env["HOME"] = str(scan["system"]["home"])
     catalog = RuleCatalog(platform=platform, environment=env)
+    settings = settings_store or SettingsStore(str(scan["system"]["home"]), env)
     items = flatten_unique(scan)
+    ownership_apps = installed_apps(str(scan["system"]["home"]))
+    ownership_launch_items = launch_items(str(scan["system"]["home"]))
     green: list[dict[str, Any]] = []
     yellow: list[dict[str, Any]] = []
     red: list[dict[str, Any]] = []
@@ -148,7 +157,14 @@ def build_analysis(
         path = str(item["path"])
         rule = catalog.match(path, "trash")
         group = str(item["group"])
-        if rule is not None:
+        ownership = resolve_ownership(
+            path,
+            str(scan["system"]["home"]),
+            apps=ownership_apps,
+            launch_agents=ownership_launch_items,
+        )
+        user_protected = settings.is_path_protected(path) or settings.is_app_protected(ownership)
+        if rule is not None and not user_protected:
             card = make_green(item, rule)
             green.append(card)
             tier = "green"
@@ -160,6 +176,13 @@ def build_analysis(
             card = make_yellow(item)
             yellow.append(card)
             tier = "yellow"
+        if ownership.get("bundle_id") or ownership.get("app_paths") or ownership.get("relationships"):
+            card["ownership"] = ownership
+        if user_protected:
+            card.pop("reviewed_trash_paths", None)
+            card["protected"] = True
+            card["why_manual"] = "目标或所属 App 已加入永久保护列表，只展示占用，不建议处置。"
+            card["disposal"] = "保留；如需重新评估，先从本地保护列表中明确移除。"
         classified.append((tier, card))
 
     item_by_path = {
@@ -201,6 +224,7 @@ def build_analysis(
         "green": green,
         "yellow": yellow,
         "red": red,
+        "installer_packages": collect_installers(items, str(scan["system"]["home"])),
         "denied": denied,
         "summary": {
             "overview": f"确定性规则识别出 {len(green)} 项可恢复处理目标，预计涉及 {format_gb(green_total)}。",

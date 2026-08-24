@@ -60,6 +60,8 @@
           "rule_risk": {"type": "string"},
           "rule_non_targets": {"type": "array", "items": {"type": "string"}}
           ,"runtime": {"$ref": "#/$defs/runtimeProfile"}
+          ,"ownership": {"$ref": "#/$defs/ownership"}
+          ,"protected": {"type": "boolean"}
         }
       }
     },
@@ -78,6 +80,8 @@
           "risk": {"type": "string"},
           "trash_paths": {"type": "array", "items": {"type": "string"}}
           ,"runtime": {"$ref": "#/$defs/runtimeProfile"}
+          ,"ownership": {"$ref": "#/$defs/ownership"}
+          ,"protected": {"type": "boolean"}
           ,"reviewed_trash_paths": {"type": "array", "items": {"type": "string"}}
           ,"stage_status": {
             "type": "object",
@@ -85,6 +89,18 @@
             "properties": {
               "state": {"enum": ["ready", "deferred"]},
               "code": {"type": "string"}
+            },
+            "additionalProperties": false
+          }
+          ,"project_artifact": {
+            "type": "object",
+            "required": ["project_root", "artifact_kind", "build_system", "idle_seconds", "latest_mtime_ns"],
+            "properties": {
+              "project_root": {"type": "string"},
+              "artifact_kind": {"type": "string"},
+              "build_system": {"type": "string"},
+              "idle_seconds": {"type": "integer", "minimum": 1800},
+              "latest_mtime_ns": {"type": "integer", "minimum": 0}
             },
             "additionalProperties": false
           }
@@ -103,8 +119,33 @@
           "why_keep": {"type": "string"},
           "indirect_release": {"type": "string"},
           "auto_reclaim": {"type": "string"},
-          "app_paths": {"type": "array", "items": {"type": "string"}}
+          "app_paths": {"type": "array", "items": {"type": "string"}},
+          "ownership": {"$ref": "#/$defs/ownership"},
+          "protected": {"type": "boolean"}
         }
+      }
+    },
+    "installer_packages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name", "path", "format", "size_bytes", "installed_state", "installed_apps",
+          "source", "last_used_at", "unique_copy_risk", "duplicates"
+        ],
+        "properties": {
+          "name": {"type": "string"},
+          "path": {"type": "string"},
+          "format": {"enum": ["DMG", "PKG", "ISO", "XIP", "ZIP"]},
+          "size_bytes": {"type": "integer", "minimum": 0},
+          "installed_state": {"type": "string"},
+          "installed_apps": {"type": "array", "items": {"type": "string"}},
+          "source": {"type": "string"},
+          "last_used_at": {"type": "string"},
+          "unique_copy_risk": {"type": "string"},
+          "duplicates": {"type": "array", "items": {"type": "string"}}
+        },
+        "additionalProperties": false
       }
     },
     "denied": {"type": "array", "items": {"type": "string"}},
@@ -141,6 +182,24 @@
     }
   },
   "$defs": {
+    "ownership": {
+      "type": "object",
+      "required": [
+        "bundle_id", "display_name", "app_paths", "relationships", "login_items",
+        "background_processes", "shared_bundle_id", "multiple_versions"
+      ],
+      "properties": {
+        "bundle_id": {"type": "string"},
+        "display_name": {"type": "string"},
+        "app_paths": {"type": "array", "items": {"type": "string"}},
+        "relationships": {"type": "array", "items": {"type": "string"}},
+        "login_items": {"type": "array", "items": {"type": "string"}},
+        "background_processes": {"type": "array", "items": {"type": "string"}},
+        "shared_bundle_id": {"type": "boolean"},
+        "multiple_versions": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
     "runtimeProfile": {
       "type": "object",
       "required": ["id", "processes", "owner_tool"],
