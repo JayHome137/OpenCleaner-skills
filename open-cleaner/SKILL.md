@@ -9,14 +9,14 @@ description: >
 
 # OpenCleaner
 
-使用版本化数据契约完成：只读扫描、确定性分级、Agent 解释、操作计划验证、报告展示和可恢复处置。
+使用版本化数据契约完成：只读扫描、确定性分级、Agent 解释、操作计划验证、决策摘要、报告展示和可恢复处置。
 
 ## 安全不变量
 
 - 扫描阶段严格只读，不修改被扫描目录。
 - Agent 只能补充解释或提高风险等级，不能授予文件操作权限。
 - `validate_plan.py` 只生成不可执行的 Dry Run；可操作按钮必须来自本地服务重新生成的短期 session plan。
-- v1 只支持 `open`、绿灯 `trash` 和黄灯 `reviewed_trash`；两个变更文件的 mode 都只能移入废纸篓，不支持永久删除。
+- v1.1 只支持 `open`、确定性绿灯 `trash` 和受限黄灯 `reviewed_trash`；两个变更文件的 mode 都只能移入废纸篓，不支持永久删除。
 - Trash 不可用时失败，不得回退到 `rm`、`os.remove` 或其他永久删除方式。
 - `$HOME`、磁盘根、系统根、应用目录根、回收站根和敏感数据目录不能成为自动处置目标。
 - 系统目录和需要管理员权限的目标只提供说明，不由本 Skill 执行。
@@ -28,6 +28,8 @@ description: >
 - `reviewed_trash` 只允许下载/临时目录的当前用户直接子项，或通过项目阶段规则复核的 allowlist 生成目录；它要求与计划及完整 action ID 集绑定的 120 秒一次性复核令牌。
 - Trash 返回后必须复核原路径已移走，并记录磁盘可用空间前后变化；复核失败按操作失败处理。
 - 所有空间释放数字都是估算；移到废纸篓后要清空废纸篓才会实际释放空间。
+- 报告必须同时区分“扫描发现”“当前可行动”和“当前被阻止”；理论分类容量不能替代 action plan 的实时授权容量。
+- npm、pnpm、Gradle、Go module/cache、Codex 普通缓存、Codex 临时副本、Claude 普通缓存、Xcode `DerivedData` 和其他所有者工具管理的目标只展示说明与检查/清理命令，不生成 `trash_paths`，不提供删除入口。
 
 ## 执行流程
 
@@ -36,7 +38,7 @@ description: >
 ### 1. 只读扫描
 
 ```bash
-python3 scripts/scan.py > /tmp/storage-scan.json
+python3 scripts/scan.py --progress > /tmp/storage-scan.json
 ```
 
 扫描结果遵循 `schemas/scan-result.schema.json`，包含：
@@ -86,7 +88,10 @@ Agent 不得修改或新增：
 
 ```bash
 python3 scripts/validate_plan.py /tmp/storage-analysis.json > /tmp/storage-action-plan.json
+    python3 scripts/summarize.py /tmp/storage-analysis.json /tmp/storage-action-plan.json
 ```
+
+如需比较两次只读分析，可使用 `python3 scripts/compare_reports.py <previous-analysis.json> <current-analysis.json>`；该命令只输出容量变化，不授予任何处置权限。
 
 输出明确包含 `purpose: dry-run` 和 `dry_run: true`。检查 `rejected`：被拒绝的目标不能在报告中显示操作按钮。Dry Run 记录候选目标、真实路径和文件身份，但在服务端和文件操作内核两层都不可执行。
 
@@ -120,19 +125,24 @@ open ~/Desktop/storage-report.html
 
 ### 6. 对话摘要
 
-报告生成后给出一段结论先行的摘要：预计可恢复处理空间、最值得先看的 2 至 3 项、覆盖率和风险最高的一项。详细路径留在报告中。
+每次都同时交付聊天摘要和 HTML：摘要必须说明当前可安全处理容量、需要人工复核数量、主要阻止原因、最值得查看的 3 至 5 组、覆盖可信度和 APFS 空间释放提醒；完整路径、证据与下钻入口留在 HTML 中。
 
 ## 报告要求
 
-保持以下顺序：磁盘总览、Top 5、执行建议、绿黄红三级卡片、权限遗漏、长期建议。
+保持以下顺序：首屏决策摘要（扫描发现 / 当前可行动 / 当前被阻止）、受控会话提示（如有）、磁盘总览、所有者聚合、覆盖与 APFS 解释、Top 5、执行建议、完整绿黄红明细、权限遗漏、历史与长期建议。
 
-- 绿灯展示 `rule_id` 和恢复说明。
+- 绿灯展示 `rule_id` 和恢复说明；“可处理”只在当前 action plan 通过实时重验后显示。
 - 绿灯同时展示规则风险和明确的非目标范围。
 - 黄灯以打开查看为主；只有下载/临时目录的当前用户直接子项或通过项目阶段规则的生成目录可显示独立人工复核 Trash，不能与普通绿灯批次混合。
 - 受控模式提供登记根内的逐层目录浏览、返回、搜索、排序、大小筛选和多选保护；浏览请求不能直接生成处置动作。
 - DMG、PKG、ISO、XIP 和 ZIP 安装包使用独立视图，展示安装状态、来源、最后使用时间和唯一副本风险。
 - 可识别条目展示 Bundle ID、显示名称、应用路径、容器/缓存/Application Support、登录项和后台项关系。
-- 所有者提示与实时运行状态分离；报告可展示检查或清理建议，但不得自动执行所有者工具命令。
+- 所有者提示与实时运行状态分离；报告可展示检查或清理建议，但不得自动执行所有者工具命令，也不得出现这些目标的删除按钮。
+- 黄灯/红灯目标记录 `evidence`：归属、置信度、证据来源、最大子项、内容画像、推荐所有者动作和未知原因。
+- 主报告按 App / 所有者工具 / 内容类别聚合，默认显示最高价值的前 8 组；完整绿黄红明细放入折叠区域。
+- 扫描结果包含短 TTL 的只读容量缓存元数据、进度和取消语义；取消或失败不得发布半成品缓存。
+- 报告展示覆盖等级、权限遗漏、purgeable、废纸篓、本地快照和 open-unlinked file 诊断；这些诊断只读，不清空废纸篓、不删除快照。
+- 静态 HTML 将 action plan 决策摘要嵌入为不可执行数据，不显示文件处置入口；只有本地服务生成的 session plan 才显示操作入口。
 - 红灯只允许定位应用，不在后台卸载。
 - 按钮不存在时，不能通过手工 HTTP 请求绕过操作计划。
 - 受控模式展示本次操作历史、失败原因、原路径复核和磁盘可用空间实测变化。

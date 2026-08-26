@@ -14,10 +14,11 @@
     "home",
     "source_analysis_sha256",
     "actions",
-    "rejected"
+    "rejected",
+    "decision"
   ],
   "properties": {
-    "schema_version": {"const": "1.0"},
+    "schema_version": {"const": "1.1"},
     "purpose": {"enum": ["dry-run", "session"]},
     "dry_run": {"type": "boolean"},
     "plan_id": {"type": "string", "minLength": 16},
@@ -42,6 +43,7 @@
           "non_targets",
           "identity",
           "parent_identity"
+          ,"size_estimate_bytes"
         ],
         "properties": {
           "action_id": {"type": "string", "minLength": 16},
@@ -53,6 +55,7 @@
           "recovery": {"type": "string"},
           "risk": {"type": "string"},
           "non_targets": {"type": "array", "items": {"type": "string"}},
+          "size_estimate_bytes": {"type": "integer", "minimum": 0},
           "identity": {
             "type": "object",
             "required": ["device", "inode", "mode", "kind", "size", "mtime_ns"],
@@ -105,7 +108,86 @@
         "additionalProperties": true
       }
     },
-    "rejected": {"type": "array"}
+    "rejected": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/rejected"}
+    },
+    "decision": {
+      "type": "object",
+      "required": ["discovery", "actionable", "blocked"],
+      "properties": {
+        "discovery": {"$ref": "#/$defs/discovery"},
+        "actionable": {"$ref": "#/$defs/actionable"},
+        "blocked": {
+          "type": "object",
+          "required": ["count", "size_bytes", "reasons"],
+          "properties": {
+            "count": {"type": "integer", "minimum": 0},
+            "size_bytes": {"type": "integer", "minimum": 0},
+            "reasons": {
+              "type": "array",
+              "items": {"$ref": "#/$defs/reason"}
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "bucket": {
+      "type": "object",
+      "required": ["count", "size_bytes"],
+      "properties": {
+        "count": {"type": "integer", "minimum": 0},
+        "size_bytes": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "discovery": {
+      "type": "object",
+      "required": ["green", "yellow", "red"],
+      "properties": {
+        "green": {"$ref": "#/$defs/bucket"},
+        "yellow": {"$ref": "#/$defs/bucket"},
+        "red": {"$ref": "#/$defs/bucket"}
+      },
+      "additionalProperties": false
+    },
+    "actionable": {
+      "type": "object",
+      "required": ["trash", "reviewed_trash", "open"],
+      "properties": {
+        "trash": {"$ref": "#/$defs/bucket"},
+        "reviewed_trash": {"$ref": "#/$defs/bucket"},
+        "open": {"$ref": "#/$defs/bucket"}
+      },
+      "additionalProperties": false
+    },
+    "rejected": {
+      "type": "object",
+      "required": ["path", "mode", "code", "message", "size_estimate_bytes"],
+      "properties": {
+        "path": {"type": "string"},
+        "mode": {"enum": ["open", "trash", "reviewed_trash"]},
+        "code": {"type": "string"},
+        "message": {"type": "string"},
+        "name": {"type": "string"},
+        "size_estimate_bytes": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": true
+    },
+    "reason": {
+      "type": "object",
+      "required": ["code", "message", "count", "size_bytes"],
+      "properties": {
+        "code": {"type": "string"},
+        "message": {"type": "string"},
+        "count": {"type": "integer", "minimum": 0},
+        "size_bytes": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    }
   },
   "additionalProperties": false
 }

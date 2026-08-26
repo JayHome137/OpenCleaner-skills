@@ -41,6 +41,7 @@ from contracts import (  # noqa: E402
 )
 from file_ops import FileOperator, OperationLog  # noqa: E402
 from policy import PolicyError, SafetyPolicy, build_action_plan, ensure_plan_fresh  # noqa: E402
+from compare_reports import compare as compare_reports  # noqa: E402
 from browse import browse_directory  # noqa: E402
 from settings import SettingsError, SettingsStore  # noqa: E402
 
@@ -79,6 +80,7 @@ class ServerContext:
         self.actions = {action["action_id"]: action for action in plan["actions"]}
         self.completed: set[str] = set()
         self.review_tokens: dict[str, dict[str, Any]] = {}
+        self.last_comparison: Optional[dict[str, Any]] = None
         self.lock = threading.Lock()
 
     def public_config(self) -> dict[str, Any]:
@@ -99,6 +101,8 @@ class ServerContext:
                     "mode": item["mode"],
                     "code": item["code"],
                     "message": item["message"],
+                    "name": item.get("name", ""),
+                    "size_estimate_bytes": item.get("size_estimate_bytes", 0),
                 }
                 for item in self.plan["rejected"]
             ],
@@ -107,10 +111,34 @@ class ServerContext:
                     "action_id": action["action_id"],
                     "mode": action["mode"],
                     "path": action["path"],
+                    "size_estimate_bytes": action.get("size_estimate_bytes", 0),
                     **({"runtime": action["runtime"]} if action.get("runtime") else {}),
                 }
                 for action in self.plan["actions"]
             ],
+        }
+
+    def decision_data(self) -> dict[str, Any]:
+        operation_log = getattr(self.operator, "operation_log", None)
+        recent = getattr(operation_log, "recent", None)
+        history = recent() if callable(recent) else {
+            "status": "unavailable", "entries": [], "completed": 0, "failed": 0, "disk_delta_bytes": 0
+        }
+        return {
+            **self.plan["decision"],
+            "authorized": [
+                {"mode": item["mode"], "path": item["path"], "size_estimate_bytes": item.get("size_estimate_bytes", 0)}
+                for item in self.plan["actions"]
+            ],
+            "rejected_items": [
+                {
+                    "mode": item["mode"], "path": item["path"], "code": item["code"],
+                    "message": item["message"], "size_estimate_bytes": item.get("size_estimate_bytes", 0),
+                }
+                for item in self.plan["rejected"]
+            ],
+            "history": history,
+            "comparison": self.last_comparison,
         }
 
     def settings(self) -> dict[str, Any]:
@@ -161,6 +189,7 @@ class ServerContext:
         if self.rescan_handler is None:
             raise PolicyError("rescan_unavailable", "当前报告不支持重新扫描")
         refreshed = validate_analysis(self.rescan_handler())
+        comparison = compare_reports(self.analysis, refreshed)
         refreshed_plan = build_action_plan(
             refreshed,
             home=self.policy.home,
@@ -171,6 +200,7 @@ class ServerContext:
             settings_store=self.settings_store,
         )
         self.analysis = refreshed
+        self.last_comparison = comparison
         self.plan = refreshed_plan
         self.actions = {action["action_id"]: action for action in refreshed_plan["actions"]}
         self.completed.clear()
@@ -184,8 +214,11 @@ class ServerContext:
     def render(self) -> str:
         report_blob = json_for_script(self.analysis)
         config_blob = json_for_script(self.public_config())
-        return self.template.replace("__REPORT_DATA__", report_blob).replace(
-            "__DELETE_CONFIG__", config_blob
+        decision_blob = json_for_script(self.decision_data())
+        return (
+            self.template.replace("__REPORT_DATA__", report_blob)
+            .replace("__DECISION_DATA__", decision_blob)
+            .replace("__DELETE_CONFIG__", config_blob)
         )
 
     def _resolve_actions(self, action_ids: Sequence[str]) -> list[dict[str, Any]]:

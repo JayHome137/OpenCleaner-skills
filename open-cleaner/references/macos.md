@@ -2,19 +2,14 @@
 
 ## 可由规则授权的范围
 
-当前规则只覆盖明确可恢复的缓存目标：
+当前规则只覆盖证据足够窄、可恢复契约明确的目标：
 
 | 规则 | 允许目标 | 限制 |
 | --- | --- | --- |
-| `macos.library-cache-entry` | `~/Library/Caches` 下的具体子项 | 不允许操作 `Caches` 根目录；运行中的应用缓存仍应先关闭应用。 |
+| `macos.library-cache-entry` | 不再作为绿灯规则 | 宽泛应用缓存只展示归属和内容画像，不提供删除入口。 |
 | `macos.xcode-derived-data-entry` | `~/Library/Developer/Xcode/DerivedData` 下的具体项目 | 不允许操作 DerivedData 根目录。 |
-| `macos.pnpm-cache-entry` | `~/Library/pnpm/store` 下的具体缓存项 | 不操作 pnpm 配置或项目目录。 |
-| `common.user-cache-entry` | `~/.cache` 下的具体子项 | 未知模型、会话或下载内容可由 Agent 提高为黄灯。 |
-| `common.npm-content-cache` | `~/.npm/_cacache` | 不包含 `~/.npmrc` 或其他配置。 |
-| `common.gradle-cache-entry` | `~/.gradle/caches` 下的具体子项 | 不包含项目源码、wrapper 或用户配置。 |
-| `common.go-module-cache` | `~/go/pkg/mod` | 不包含 Go 源码、`go.mod`、`go.sum`、`~/go/bin` 或 `~/go/src`。 |
-| `common.codex-*` | `~/.codex/cache`、确定性 `.tmp` 副本和插件 cache | 不包含 sessions、worktrees、memories、skills、插件数据、配置或备份。 |
-| `common.claude-cache` | `~/.claude/cache` | 不包含 projects、sessions、tasks、backups、插件或配置。 |
+| 所有者工具缓存 | npm、pnpm、Gradle、Go、Codex、Claude 等 | 只展示所有者、证据和命令；OpenCleaner 不执行命令，也不提供删除入口。 |
+| `common.codex-*` | 仅明确的 `.tmp/bundled-marketplaces`、`.tmp/plugins` 临时副本 | 不包含 sessions、worktrees、memories、skills、插件数据、配置或备份。 |
 
 规则授权仅说明路径类别可恢复，执行时仍要通过保护目录、符号链接、文件身份、父目录、所有者工具运行状态、30 分钟静置和短期计划检查。pnpm、npm、Gradle、Go、Chrome、Codex、Claude、UTM、Tart、Docker/OrbStack 和微信等已知识别项在进程活动、恢复工具缺失或状态未知时失败关闭；展示的所有者工具命令不会自动执行。
 

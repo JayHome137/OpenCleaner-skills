@@ -23,6 +23,7 @@ REQUIRED_FILES = [
     ROOT / "docs" / "INDEPENDENCE_AUDIT.md",
     ROOT / "docs" / "PROVENANCE.md",
     ROOT / "docs" / "PERFORMANCE_BASELINE.md",
+    ROOT / "docs" / "STATUS_AND_MOLE_GAP_AUDIT_2026-08-26.md",
     SKILL_DIR / "SKILL.md",
     SKILL_DIR / "agents" / "openai.yaml",
     SKILL_DIR / "assets" / "report_template.html",
@@ -35,6 +36,7 @@ REQUIRED_FILES = [
     SKILL_DIR / "rules" / "macos.json",
     SKILL_DIR / "rules" / "windows.json",
     SCRIPTS_DIR / "build_report.py",
+    SCRIPTS_DIR / "compare_reports.py",
     SCRIPTS_DIR / "browse.py",
     SCRIPTS_DIR / "classify.py",
     SCRIPTS_DIR / "contracts.py",
@@ -46,8 +48,10 @@ REQUIRED_FILES = [
     SCRIPTS_DIR / "project_stage.py",
     SCRIPTS_DIR / "rules.py",
     SCRIPTS_DIR / "scan.py",
+    SCRIPTS_DIR / "scan_cache.py",
     SCRIPTS_DIR / "server.py",
     SCRIPTS_DIR / "settings.py",
+    SCRIPTS_DIR / "summarize.py",
     SCRIPTS_DIR / "validate_plan.py",
     ROOT / ".github" / "workflows" / "macos-validation.yml",
     ROOT / "README.md",
@@ -59,6 +63,9 @@ REQUIRED_FILES = [
     ROOT / "tests" / "windows_smoke.py",
     ROOT / "tests" / "macos_smoke.py",
     ROOT / "tests" / "fixtures" / "sample_analysis.json",
+    ROOT / "tests" / "test_compare_reports.py",
+    ROOT / "tests" / "test_contracts_v11.py",
+    ROOT / "tests" / "test_scan_cache.py",
     ROOT / "scripts" / "benchmark_scan.py",
 ]
 
@@ -97,7 +104,7 @@ def check_openai_yaml() -> None:
 
 def check_licensing() -> None:
     version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
-    if version != "1.0.0":
+    if version != "1.1.0":
         fail(f"unexpected project version: {version}")
 
     license_text = (ROOT / "LICENSE").read_text(encoding="utf-8")
@@ -110,7 +117,7 @@ def check_licensing() -> None:
     notice = (ROOT / "NOTICE").read_text(encoding="utf-8")
     for snippet in (
         "Required Notice: Copyright (c) 2026 JayHome137.",
-        "OpenCleaner version 1.0.0",
+        "OpenCleaner version 1.1.0",
         "GitHub repository maintainers",
     ):
         if snippet not in notice:
@@ -148,7 +155,7 @@ def check_json_files() -> None:
             value = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             fail(f"invalid JSON in {path.relative_to(ROOT)}: {exc}")
-        if value.get("schema_version") != "1.0" and "$schema" not in value:
+        if value.get("schema_version") not in ("1.0", "1.1") and "$schema" not in value:
             fail(f"missing schema version in {path.relative_to(ROOT)}")
         if path.parent.name == "rules":
             for index, rule in enumerate(value.get("rules", [])):
@@ -177,12 +184,15 @@ def check_no_permanent_delete_surface() -> None:
             if snippet in text:
                 fail(f"permanent delete surface found in {path.relative_to(ROOT)}: {snippet}")
     template = (SKILL_DIR / "assets" / "report_template.html").read_text(encoding="utf-8")
-    if "直接删除" in template or "'rm'" in template or '"rm"' in template:
+    if "'rm'" in template or '"rm"' in template or 'data-mode="rm"' in template:
         fail("report template still exposes permanent delete")
     for legacy in ("data-paths", "authorizedPaths", "postAction"):
         if legacy in template:
             fail(f"report template still contains legacy path request logic: {legacy}")
-    for required in ("本次操作历史", "rule_non_targets", "disk_free_delta_bytes"):
+    for required in (
+        "本次操作历史", "历史操作摘要", "rule_non_targets", "disk_free_delta_bytes",
+        "__DECISION_DATA__", "当前决策", "OpenCleaner 不会执行",
+    ):
         if required not in template:
             fail(f"report template missing guarded result surface: {required}")
 
@@ -265,6 +275,11 @@ def check_runtime_imports_and_static_report() -> None:
     html = build_report.render_report(sample, template)
     if "Sample validation report." not in html or "__REPORT_DATA__" in html:
         fail("static report output did not receive validated sample data")
+    if "const SESSION = null" not in html or "const DECISION =" not in html:
+        fail("static report did not receive the read-only decision/session boundary")
+    for marker in ('data-mode="trash"', 'data-mode="reviewed_trash"', 'class="action-panel"'):
+        if marker in html:
+            fail(f"static report exposed a concrete operation control: {marker}")
 
 
 def main() -> None:

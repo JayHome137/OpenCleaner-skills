@@ -70,6 +70,21 @@ def inspect_installer(
     installed_apps = _matching_apps(path, app_roots)
     duplicates = sorted({os.path.abspath(value) for value in (duplicate_paths or []) if os.path.abspath(value) != os.path.abspath(path)})
     source = _where_from(path)
+    signature_state = "未验证"
+    if suffix not in {".app", ".pkg"}:
+        try:
+            verified = subprocess.run(["/usr/bin/codesign", "--verify", "--strict", path], capture_output=True, text=True, timeout=8, check=False)
+            signature_state = "已验证" if verified.returncode == 0 else "未通过或不适用"
+        except (OSError, subprocess.SubprocessError):
+            signature_state = "无法验证"
+    mount_state = "不适用"
+    if suffix in {".dmg", ".iso", ".xip"}:
+        try:
+            imageinfo = subprocess.run(["/usr/bin/hdiutil", "imageinfo", path], capture_output=True, text=True, timeout=8, check=False)
+            mount_state = "可读取镜像信息" if imageinfo.returncode == 0 else "无法读取镜像信息"
+        except (OSError, subprocess.SubprocessError):
+            mount_state = "无法验证"
+    duplicate_evidence = f"检测到 {len(duplicates)} 个同名副本；仍需用户确认内容是否相同。" if duplicates else "未检测到同名副本，不能据此证明它是唯一副本。"
     return {
         "name": Path(path).name,
         "path": os.path.abspath(path),
@@ -81,6 +96,9 @@ def inspect_installer(
         "last_used_at": datetime.fromtimestamp(info.st_atime, timezone.utc).isoformat().replace("+00:00", "Z"),
         "unique_copy_risk": "较低：检测到同名副本" if duplicates else "需确认：未检测到同名副本",
         "duplicates": duplicates,
+        "signature_state": signature_state,
+        "mount_state": mount_state,
+        "duplicate_evidence": duplicate_evidence,
     }
 
 

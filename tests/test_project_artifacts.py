@@ -176,7 +176,9 @@ class ProjectArtifactTests(unittest.TestCase):
         (target / "new.bin").write_bytes(b"active")
         with self.assertRaises(PolicyError) as raised:
             policy.revalidate(action)
-        self.assertEqual(raised.exception.code, "project_not_idle")
+        # Revalidation reports the changed artifact identity before checking
+        # the secondary idle gate, so stale plans have an unambiguous reason.
+        self.assertEqual(raised.exception.code, "identity_changed")
 
     def test_stage_augmentation_is_transactional_and_contract_validated(self) -> None:
         project, target = self.make_swift_project("StageProject")

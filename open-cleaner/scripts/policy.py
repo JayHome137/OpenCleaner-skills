@@ -9,7 +9,7 @@ import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Optional
+from typing import Any, Iterable, Mapping, Optional, Sequence
 
 from contracts import ACTION_PLAN_SCHEMA_VERSION, canonical_sha256, validate_action_plan, validate_analysis
 from project_artifacts import (
@@ -18,7 +18,7 @@ from project_artifacts import (
     inspect_project_artifact,
 )
 from rules import RuleCatalog, RuleError, canonical_path, is_within, normalized_platform
-from runtime import RuntimeInspector
+from runtime import RuntimeInspector, owner_profile
 from ownership import installed_apps, resolve_ownership
 from settings import SettingsStore
 
@@ -405,6 +405,11 @@ class SafetyPolicy:
                 raise PolicyError("tier_denied", "普通处置只允许确定性规则授权的绿灯目标")
             if not is_within(target, self.home, include_root=False):
                 raise PolicyError("trash_out_of_scope", "只允许处置用户主目录内的目标")
+            if owner_profile(target, requested_rule_id or ""):
+                raise PolicyError(
+                    "owner_tool_only",
+                    "该目标由所有者工具管理，只提供说明，不开放直接删除入口",
+                )
             rule = self.catalog.match(target, "trash", requested_rule_id)
             if rule is None:
                 raise PolicyError("no_matching_rule", f"没有确定性规则授权该路径：{target}")
@@ -459,17 +464,21 @@ class SafetyPolicy:
                 raise PolicyError("open_files_unknown", "无法确认目标是否有打开文件，已阻止处置")
             runtime = self.runtime_inspector.inspect(target, rule_id)
             if runtime:
+                execution = str((runtime.get("owner_tool") or {}).get("execution", ""))
+                if execution:
+                    raise PolicyError(
+                        "owner_tool_only",
+                        "该目标由所有者工具管理，只提供说明，不开放直接删除入口",
+                    )
                 if runtime["state"] == "active":
                     raise PolicyError("owner_active", f"{runtime['owner_tool']['name']} 正在运行，已阻止处置")
                 if runtime["state"] == "unknown":
                     raise PolicyError("runtime_unknown", "无法确认所有者工具是否正在运行，已阻止处置")
                 result["runtime"] = runtime
             workflow_owner = str(runtime.get("id", "")) if runtime else ""
-            if (
-                rule_id == "macos.xcode-derived-data-entry"
-                or os.path.basename(target) == "ms-playwright"
-                or workflow_owner in {"pnpm", "npm", "gradle", "go-build", "go-module", "codex", "claude"}
-            ):
+            if os.path.basename(target) == "ms-playwright" or workflow_owner in {
+                "pnpm", "npm", "gradle", "go-build", "go-module", "codex", "claude"
+            }:
                 try:
                     result["activity"] = inspect_artifact_activity(target, self.environment)
                 except ProjectArtifactError as exc:
@@ -482,6 +491,21 @@ class SafetyPolicy:
         target = canonical_path(str(action["path"]))
         if os.path.normcase(target) != os.path.normcase(str(action["canonical_path"])):
             raise PolicyError("path_changed", "目标真实路径已经变化")
+
+        # Compare the identities before running dynamic gates (processes,
+        # SQLite state, and project idle checks).  Otherwise a changed build
+        # artifact can report a secondary "not idle" error and obscure the
+        # fact that the original action plan no longer names the same object.
+        current_identity = capture_identity(target)
+        if not identities_match(action["identity"], current_identity):
+            raise PolicyError("identity_changed", "目标文件身份已经变化，操作计划失效")
+        current_parent_identity = capture_identity(os.path.dirname(target))
+        if not identities_match(
+            action["parent_identity"],
+            current_parent_identity,
+            include_metadata=False,
+        ):
+            raise PolicyError("parent_changed", "目标父目录身份已经变化，操作计划失效")
         refreshed = self.authorize(
             target,
             str(action["mode"]),
@@ -515,6 +539,70 @@ def _iter_requested_actions(analysis: Mapping[str, Any]) -> Iterable[tuple[str, 
             yield "open", str(path), "red", None, name
 
 
+def _analysis_size_index(analysis: Mapping[str, Any]) -> dict[str, int]:
+    sizes: dict[str, int] = {}
+    for tier in ("green", "yellow", "red"):
+        for item in analysis.get(tier, []):
+            size = int(item.get("size_bytes", 0) or 0)
+            for path in (
+                [item.get("path")]
+                + list(item.get("trash_paths") or [])
+                + list(item.get("reviewed_trash_paths") or [])
+                + list(item.get("app_paths") or [])
+            ):
+                if not path:
+                    continue
+                try:
+                    key = os.path.normcase(canonical_path(str(path)))
+                except RuleError:
+                    key = os.path.normcase(os.path.abspath(str(path)))
+                sizes.setdefault(key, size)
+    return sizes
+
+
+def build_decision(
+    analysis: Mapping[str, Any],
+    actions: Sequence[Mapping[str, Any]],
+    rejected: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
+    discovery = {
+        tier: {
+            "count": len(analysis.get(tier, [])),
+            "size_bytes": sum(int(item.get("size_bytes", 0) or 0) for item in analysis.get(tier, [])),
+        }
+        for tier in ("green", "yellow", "red")
+    }
+    actionable = {
+        mode: {
+            "count": sum(1 for action in actions if action.get("mode") == mode),
+            "size_bytes": sum(
+                int(action.get("size_estimate_bytes", 0) or 0)
+                for action in actions
+                if action.get("mode") == mode
+            ),
+        }
+        for mode in ("trash", "reviewed_trash", "open")
+    }
+    reasons: dict[str, dict[str, Any]] = {}
+    for item in rejected:
+        code = str(item.get("code") or "unknown")
+        reason = reasons.setdefault(
+            code,
+            {"code": code, "message": str(item.get("message") or "已阻止"), "count": 0, "size_bytes": 0},
+        )
+        reason["count"] += 1
+        reason["size_bytes"] += int(item.get("size_estimate_bytes", 0) or 0)
+    return {
+        "discovery": discovery,
+        "actionable": actionable,
+        "blocked": {
+            "count": len(rejected),
+            "size_bytes": sum(int(item.get("size_estimate_bytes", 0) or 0) for item in rejected),
+            "reasons": sorted(reasons.values(), key=lambda item: (-item["size_bytes"], -item["count"], item["code"])),
+        },
+    }
+
+
 def build_action_plan(
     analysis: dict[str, Any],
     home: Optional[str] = None,
@@ -524,6 +612,7 @@ def build_action_plan(
     purpose: str = "dry-run",
     runtime_inspector: Optional[RuntimeInspector] = None,
     settings_store: Optional[SettingsStore] = None,
+    catalog: Optional[RuleCatalog] = None,
 ) -> dict[str, Any]:
     validate_analysis(analysis)
     if purpose not in ("dry-run", "session"):
@@ -532,6 +621,7 @@ def build_action_plan(
         home=home,
         platform=platform,
         environment=environment,
+        catalog=catalog,
         runtime_inspector=runtime_inspector,
         settings_store=settings_store,
     )
@@ -543,17 +633,23 @@ def build_action_plan(
         raise PolicyError("home_mismatch", "analysis 主目录与当前策略主目录不一致")
     generated = now or utc_now()
     actions: list[dict[str, Any]] = []
-    rejected: list[dict[str, str]] = []
+    rejected: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
+    size_index = _analysis_size_index(analysis)
     policy.runtime_inspector.refresh_open_file_snapshot()
     for mode, path, tier, rule_id, name in _iter_requested_actions(analysis):
+        try:
+            size_key = os.path.normcase(canonical_path(path))
+        except RuleError:
+            size_key = os.path.normcase(os.path.abspath(path))
+        size_estimate = size_index.get(size_key, 0)
         if len(actions) >= MAX_PLAN_ACTIONS:
-            rejected.append({"path": path, "mode": mode, "code": "plan_limit", "message": "操作计划数量超过上限"})
+            rejected.append({"path": path, "mode": mode, "code": "plan_limit", "message": "操作计划数量超过上限", "name": name, "size_estimate_bytes": size_estimate})
             continue
         try:
             action = policy.authorize(path, mode, tier, rule_id)
         except PolicyError as exc:
-            rejected.append({"path": path, "mode": mode, "code": exc.code, "message": str(exc)})
+            rejected.append({"path": path, "mode": mode, "code": exc.code, "message": str(exc), "name": name, "size_estimate_bytes": size_estimate})
             continue
         key = (mode, os.path.normcase(action["canonical_path"]))
         if key in seen:
@@ -561,6 +657,7 @@ def build_action_plan(
         seen.add(key)
         action["action_id"] = secrets.token_urlsafe(18)
         action["name"] = name
+        action["size_estimate_bytes"] = size_estimate
         actions.append(action)
     policy.runtime_inspector.clear_open_file_snapshot()
     plan = {
@@ -575,6 +672,7 @@ def build_action_plan(
         "source_analysis_sha256": canonical_sha256(analysis),
         "actions": actions,
         "rejected": rejected,
+        "decision": build_decision(analysis, actions, rejected),
     }
     return validate_action_plan(plan)
 

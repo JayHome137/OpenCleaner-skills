@@ -107,7 +107,7 @@ class RuleCatalog:
             data = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:
             raise RuleError(f"无法读取规则文件 {path.name}：{exc}") from exc
-        if data.get("schema_version") != "1.0" or not isinstance(data.get("rules"), list):
+        if data.get("schema_version") != "1.1" or not isinstance(data.get("rules"), list):
             raise RuleError(f"规则文件格式无效：{path.name}")
         return data["rules"]
 

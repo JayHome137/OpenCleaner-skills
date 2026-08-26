@@ -12,17 +12,23 @@
     "green",
     "yellow",
     "red",
-    "summary"
+    "summary",
+    "coverage_assessment",
+    "owner_groups"
   ],
   "properties": {
-    "schema_version": {"const": "1.0"},
+    "schema_version": {"const": "1.1"},
     "source_scan_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "generated_at": {"type": "string"},
     "scan_seconds": {"type": "number", "minimum": 0},
     "system": {
       "type": "object",
-      "required": ["os", "home"],
-      "properties": {"os": {"type": "string"}, "home": {"type": "string"}}
+      "required": ["os", "home", "apfs_diagnostics"],
+      "properties": {
+        "os": {"type": "string"},
+        "home": {"type": "string"},
+        "apfs_diagnostics": {"$ref": "#/$defs/apfsDiagnostics"}
+      }
     },
     "top5": {
       "type": "array",
@@ -46,7 +52,7 @@
         "type": "object",
         "required": [
           "name", "path", "size_estimate", "kill_processes", "trash_paths", "commands",
-          "rule_id", "rule_reason", "rule_risk", "rule_non_targets"
+          "rule_id", "rule_reason", "rule_risk", "rule_non_targets", "size_bytes"
         ],
         "properties": {
           "name": {"type": "string"},
@@ -59,6 +65,7 @@
           "rule_reason": {"type": "string"},
           "rule_risk": {"type": "string"},
           "rule_non_targets": {"type": "array", "items": {"type": "string"}}
+          ,"size_bytes": {"type": "integer", "minimum": 0}
           ,"runtime": {"$ref": "#/$defs/runtimeProfile"}
           ,"ownership": {"$ref": "#/$defs/ownership"}
           ,"protected": {"type": "boolean"}
@@ -69,7 +76,7 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["name", "path", "size", "content_profile", "why_manual", "disposal", "risk"],
+        "required": ["name", "path", "size", "size_bytes", "content_profile", "why_manual", "disposal", "risk", "evidence"],
         "properties": {
           "name": {"type": "string"},
           "path": {"type": "string"},
@@ -78,6 +85,8 @@
           "why_manual": {"type": "string"},
           "disposal": {"type": "string"},
           "risk": {"type": "string"},
+          "size_bytes": {"type": "integer", "minimum": 0},
+          "evidence": {"$ref": "#/$defs/evidence"},
           "trash_paths": {"type": "array", "items": {"type": "string"}}
           ,"runtime": {"$ref": "#/$defs/runtimeProfile"}
           ,"ownership": {"$ref": "#/$defs/ownership"}
@@ -111,7 +120,7 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["name", "path", "size", "why_keep", "indirect_release", "auto_reclaim"],
+        "required": ["name", "path", "size", "size_bytes", "why_keep", "indirect_release", "auto_reclaim", "evidence"],
         "properties": {
           "name": {"type": "string"},
           "path": {"type": "string"},
@@ -119,6 +128,8 @@
           "why_keep": {"type": "string"},
           "indirect_release": {"type": "string"},
           "auto_reclaim": {"type": "string"},
+          "size_bytes": {"type": "integer", "minimum": 0},
+          "evidence": {"$ref": "#/$defs/evidence"},
           "app_paths": {"type": "array", "items": {"type": "string"}},
           "ownership": {"$ref": "#/$defs/ownership"},
           "protected": {"type": "boolean"}
@@ -143,7 +154,10 @@
           "source": {"type": "string"},
           "last_used_at": {"type": "string"},
           "unique_copy_risk": {"type": "string"},
-          "duplicates": {"type": "array", "items": {"type": "string"}}
+          "duplicates": {"type": "array", "items": {"type": "string"}},
+          "signature_state": {"type": "string"},
+          "mount_state": {"type": "string"},
+          "duplicate_evidence": {"type": "string"}
         },
         "additionalProperties": false
       }
@@ -161,6 +175,40 @@
         "min_kb": {"type": "integer", "minimum": 0}
       },
       "additionalProperties": false
+    },
+    "coverage_assessment": {
+      "type": "object",
+      "required": ["level", "label", "completed_ratio", "permission_denied", "skipped_roots", "limitations", "rescan_advice"],
+      "properties": {
+        "level": {"enum": ["complete", "usable_with_gaps", "critical_gaps"]},
+        "label": {"type": "string"},
+        "completed_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+        "permission_denied": {"type": "integer", "minimum": 0},
+        "skipped_roots": {"type": "integer", "minimum": 0},
+        "limitations": {"type": "array", "items": {"type": "string"}},
+        "rescan_advice": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "owner_groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "owner", "source", "item_count", "size_bytes", "size", "highest_tier", "policy", "summary", "paths"],
+        "properties": {
+          "id": {"type": "string"},
+          "owner": {"type": "string"},
+          "source": {"type": "string"},
+          "item_count": {"type": "integer", "minimum": 0},
+          "size_bytes": {"type": "integer", "minimum": 0},
+          "size": {"type": "string"},
+          "highest_tier": {"enum": ["green", "yellow", "red"]},
+          "policy": {"enum": ["safe_trash", "review", "owner_tool", "keep"]},
+          "summary": {"type": "string"},
+          "paths": {"type": "array", "items": {"type": "string"}}
+        },
+        "additionalProperties": false
+      }
     },
     "summary": {
       "type": "object",
@@ -182,6 +230,74 @@
     }
   },
   "$defs": {
+    "diagnosticStatus": {"enum": ["available", "empty", "unavailable"]},
+    "apfsDiagnostics": {
+      "type": "object",
+      "required": ["purgeable", "trash", "local_snapshots", "open_unlinked_files", "release_notes"],
+      "properties": {
+        "purgeable": {
+          "type": "object",
+          "required": ["status", "value"],
+          "properties": {
+            "status": {"$ref": "#/$defs/diagnosticStatus"},
+            "value": {"type": "string"}
+          },
+          "additionalProperties": false
+        },
+        "trash": {
+          "type": "object",
+          "required": ["status", "estimated_bytes"],
+          "properties": {
+            "status": {"$ref": "#/$defs/diagnosticStatus"},
+            "estimated_bytes": {"type": "integer", "minimum": 0}
+          },
+          "additionalProperties": false
+        },
+        "local_snapshots": {
+          "type": "object",
+          "required": ["status", "count"],
+          "properties": {
+            "status": {"$ref": "#/$defs/diagnosticStatus"},
+            "count": {"type": "integer", "minimum": 0}
+          },
+          "additionalProperties": false
+        },
+        "open_unlinked_files": {
+          "type": "object",
+          "required": ["status", "count", "estimated_bytes"],
+          "properties": {
+            "status": {"$ref": "#/$defs/diagnosticStatus"},
+            "count": {"type": "integer", "minimum": 0},
+            "estimated_bytes": {"type": "integer", "minimum": 0}
+          },
+          "additionalProperties": false
+        },
+        "release_notes": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "object",
+      "required": ["owner", "confidence", "sources", "largest_children", "content_profile", "recommended_owner_action", "unknown_reason"],
+      "properties": {
+        "owner": {"type": "string"},
+        "confidence": {"enum": ["high", "medium", "low"]},
+        "sources": {"type": "array", "items": {"type": "string"}},
+        "largest_children": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "size_bytes"],
+            "properties": {"name": {"type": "string"}, "size_bytes": {"type": "integer", "minimum": 0}},
+            "additionalProperties": false
+          }
+        },
+        "content_profile": {"type": "string"},
+        "recommended_owner_action": {"type": "string"},
+        "unknown_reason": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
     "ownership": {
       "type": "object",
       "required": [

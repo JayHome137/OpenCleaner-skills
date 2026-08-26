@@ -7,12 +7,13 @@
 
 ## 核心能力
 
-- **macOS 存储分析**：识别磁盘热点、大目录、开发缓存、离线内容和应用数据。
+- **macOS 存储分析**：识别磁盘热点、大目录、开发缓存、离线内容和应用数据，并明确覆盖可信度与 APFS 空间释放延迟。
 - **确定性分级**：规则引擎先生成绿、黄、红三级草稿，Agent 只能补充解释或提高风险，不能新增文件操作权限。
-- **中文交互报告**：展示磁盘总览、Top 5、安装包专项视图、处置建议、权限遗漏和风险说明；受控模式支持目录逐层浏览、搜索、排序、大小筛选、多选、批次确认、逐项结果和重新扫描。
+- **中文交互报告**：同时展示扫描发现、当前可行动和当前被阻止的决策摘要，按 App/所有者聚合前 8 组；完整明细、证据、安装包专项视图、权限遗漏和风险说明保留在 HTML 下钻区域。
 - **App 归属与运行态保护**：解析 Bundle ID、显示名称、容器、缓存、Application Support、登录项和后台项；SQLite WAL/SHM、打开文件、共享 Bundle ID、多版本 App、活动进程或未知状态都会阻止处置。
 - **本地保护与扫描根**：持久保护路径或 App，并登记主目录或 `/Volumes` 当前挂载卷中的自定义只读扫描根；两者都不能授予新的删除权限。
-- **分级安全处置**：绿灯使用普通 Trash；下载或临时目录的黄灯直接子项必须经过独立人工复核、短时一次性令牌和更强确认。
+- **分级安全处置**：普通 Trash 当前不对所有者工具管理的内容开放；下载或临时目录的黄灯直接子项必须经过独立人工复核、短时一次性令牌和更强确认。npm、pnpm、Gradle、Go、Codex、Claude、Xcode DerivedData 等所有者工具目标只展示说明和命令，不开放删除入口。
+- **可重复使用**：只读容量测量支持短 TTL、指纹失效的私有缓存；扫描支持 stderr 进度，取消不会发布半成品。
 - **项目产物阶段**：按需发现 allowlist 内的构建/测试生成目录；只有项目清单、Git 状态、静置期和打开文件检查全部通过才进入黄灯复核。
 - **操作可审计**：记录操作结果、失败原因、目标复核和磁盘可用空间变化。
 
@@ -46,9 +47,10 @@ cp -R OpenCleaner-skills/open-cleaner "${CODEX_HOME:-$HOME/.codex}/skills/"
 
 ```bash
 cd open-cleaner
-python3 scripts/scan.py > /tmp/storage-scan.json
+python3 scripts/scan.py --progress > /tmp/storage-scan.json
 python3 scripts/classify.py /tmp/storage-scan.json /tmp/storage-analysis.json
 python3 scripts/validate_plan.py /tmp/storage-analysis.json > /tmp/storage-dry-run.json
+python3 scripts/summarize.py /tmp/storage-analysis.json /tmp/storage-dry-run.json
 python3 scripts/server.py /tmp/storage-analysis.json
 ```
 
@@ -70,6 +72,10 @@ python3 scripts/server.py /tmp/open-cleaner-project-stage.json
 python3 scripts/build_report.py /tmp/storage-analysis.json ~/Desktop/storage-report.html
 ```
 
+该 HTML 是最终的只读结果入口：它包含决策摘要、证据和完整明细，但不会显示文件处置按钮；只有上面的本地受控服务会根据当前 session plan 显示可操作入口。
+
+需要比较两次分析时，可运行 `python3 scripts/compare_reports.py <previous-analysis.json> <current-analysis.json>` 查看按风险级别和总量的容量变化；对比结果只读，不会产生处置动作。
+
 ## 安全设计
 
 - 扫描阶段严格只读，不修改被扫描目录。
@@ -81,6 +87,7 @@ python3 scripts/build_report.py /tmp/storage-analysis.json ~/Desktop/storage-rep
 - SQLite WAL/SHM、打开文件、共享 Bundle ID 和多版本 App 在服务端策略层重新检查。
 - 已知所有者工具的运行状态必须是 `inactive`；`active` 或 `unknown` 都会失败关闭，执行前再次检查。
 - Trash 失败即停止，不回退到 `rm`、`os.remove` 或其他永久删除方式。
+- 所有者工具管理的目标仅作为解释卡片出现；命令是复核建议，OpenCleaner 不会代执行，也不会把它们加入 Trash action。
 - 批量操作在第一个副作用前完成全部目标复核，已完成的 Trash 动作不能重放。
 - 普通 `trash` 仅限绿灯；`reviewed_trash` 仅限黄灯下载/临时直接子项或严格验证的项目生成目录。复核令牌有效 120 秒、只用一次，且与计划和完整 action ID 集绑定。
 - Trash 返回成功后仍会确认原路径已经移走，并写入本地操作日志。
@@ -88,12 +95,13 @@ python3 scripts/build_report.py /tmp/storage-analysis.json ~/Desktop/storage-rep
 ## 工作原理
 
 ```text
-只读扫描
+只读扫描（进度 + 私有容量缓存）
   -> 版本化 scan-result
   -> 确定性规则分类
   -> Agent 补充语义解释
   -> App 归属与安装包元数据
   -> 不可执行 Dry Run
+  -> 聊天决策摘要（与 HTML 同时交付）
   -> 短期 session action plan
   -> HTML 目录浏览、保护列表、多选、批次确认与运行态提示
   -> 黄灯独立复核令牌（仅适用受限目标）

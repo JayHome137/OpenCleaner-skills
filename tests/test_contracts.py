@@ -67,6 +67,7 @@ class ContractTests(unittest.TestCase):
                     "idle_seconds": 0,
                     "latest_mtime_ns": 1,
                 },
+                "size_estimate_bytes": 0,
             }
         ]
         with self.assertRaisesRegex(ContractError, "不能少于 1800 秒"):

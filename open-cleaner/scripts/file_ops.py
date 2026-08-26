@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -60,6 +61,68 @@ class OperationLog:
             os.fchmod(descriptor, 0o600)
         with os.fdopen(descriptor, "a", encoding="utf-8", newline="\n") as handle:
             handle.write(line + "\n")
+
+    def recent(self, limit: int = 20, max_bytes: int = 256 * 1024) -> dict[str, Any]:
+        normalized_limit = max(1, min(int(limit), 100))
+        normalized_bytes = max(1024, min(int(max_bytes), 1024 * 1024))
+        try:
+            if self.state_dir.is_symlink() or self.path.is_symlink():
+                raise OSError("操作日志路径不能是符号链接")
+            if not self.path.exists():
+                return {"status": "empty", "entries": [], "completed": 0, "failed": 0, "disk_delta_bytes": 0}
+            flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+            descriptor = os.open(self.path, flags)
+            try:
+                metadata = os.fstat(descriptor)
+                if not stat.S_ISREG(metadata.st_mode):
+                    raise OSError("操作日志不是普通文件")
+                start = max(0, metadata.st_size - normalized_bytes)
+                os.lseek(descriptor, start, os.SEEK_SET)
+                payload = os.read(descriptor, normalized_bytes)
+            finally:
+                os.close(descriptor)
+            text = payload.decode("utf-8", errors="replace")
+            lines = text.splitlines()
+            if start and lines:
+                lines = lines[1:]
+            entries = []
+            for line in reversed(lines):
+                try:
+                    item = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(item, dict) or item.get("status") not in ("completed", "failed"):
+                    continue
+                entries.append(
+                    {
+                        "timestamp": str(item.get("timestamp", "")),
+                        "mode": str(item.get("mode", "")),
+                        "path": str(item.get("path", "")),
+                        "rule_id": str(item.get("rule_id", "")),
+                        "status": str(item.get("status", "")),
+                        "disk_free_delta_bytes": int(item.get("disk_free_delta_bytes", 0) or 0),
+                        "target_exists_after": item.get("target_exists_after"),
+                        "error": str(item.get("error", "")),
+                    }
+                )
+                if len(entries) >= normalized_limit:
+                    break
+            return {
+                "status": "available" if entries else "empty",
+                "entries": entries,
+                "completed": sum(1 for item in entries if item["status"] == "completed"),
+                "failed": sum(1 for item in entries if item["status"] == "failed"),
+                "disk_delta_bytes": sum(item["disk_free_delta_bytes"] for item in entries),
+            }
+        except OSError as exc:
+            return {
+                "status": "unavailable",
+                "message": str(exc),
+                "entries": [],
+                "completed": 0,
+                "failed": 0,
+                "disk_delta_bytes": 0,
+            }
 
 
 def _trash_macos(path: str) -> None:

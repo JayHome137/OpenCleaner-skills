@@ -18,7 +18,7 @@ class RuleCatalogTests(unittest.TestCase):
             home = Path(temporary) / "home"
             home.mkdir()
             catalog = RuleCatalog("darwin", {"HOME": str(home)})
-            self.assertTrue(catalog.rules)
+            self.assertEqual(catalog.rules, ())
             for rule in catalog.rules:
                 with self.subTest(rule=rule.id):
                     self.assertEqual(rule.classification, "green")
@@ -26,34 +26,50 @@ class RuleCatalogTests(unittest.TestCase):
                     self.assertTrue(rule.risk)
                     self.assertTrue(rule.non_targets)
 
-    def test_blocked_component_cannot_match_broad_cache_rule(self) -> None:
+    def test_broad_cache_roots_are_not_executable_rules(self) -> None:
         with tempfile.TemporaryDirectory(prefix="storage-rules-") as temporary:
             home = Path(temporary) / "home"
-            target = home / ".cache" / "credentials"
-            target.mkdir(parents=True)
+            targets = [
+                home / ".cache" / "entry",
+                home / "Library" / "Caches" / "com.example",
+                home / ".npm" / "_cacache",
+                home / "Library" / "pnpm" / "store" / "v3",
+                home / ".gradle" / "caches" / "modules",
+                home / "go" / "pkg" / "mod",
+                home / ".codex" / "cache",
+                home / ".codex" / "plugins" / "cache",
+                home / ".claude" / "cache",
+            ]
+            for target in targets:
+                target.mkdir(parents=True)
             catalog = RuleCatalog("darwin", {"HOME": str(home)})
-            self.assertIsNone(catalog.match(str(target), "trash"))
+            for target in targets:
+                with self.subTest(path=target):
+                    self.assertIsNone(catalog.match(str(target), "trash"))
 
-    def test_agent_and_go_workflow_rules_are_exactly_scoped(self) -> None:
+    def test_owner_managed_generated_targets_are_not_executable(self) -> None:
         with tempfile.TemporaryDirectory(prefix="storage-rules-") as temporary:
             home = Path(temporary) / "home"
-            expected = {
-                home / "go" / "pkg" / "mod": "common.go-module-cache",
-                home / ".codex" / "cache": "common.codex-cache",
-                home / ".codex" / ".tmp" / "bundled-marketplaces": "common.codex-bundled-marketplaces-temp",
-                home / ".codex" / ".tmp" / "plugins": "common.codex-plugins-temp",
-                home / ".codex" / "plugins" / "cache": "common.codex-plugin-cache",
-                home / ".claude" / "cache": "common.claude-cache",
+            targets = {
+                home / ".codex" / ".tmp" / "bundled-marketplaces",
+                home / ".codex" / ".tmp" / "plugins",
+                home / "Library" / "Developer" / "Xcode" / "DerivedData" / "Example",
             }
-            for path in expected:
+            for path in targets:
                 path.mkdir(parents=True, exist_ok=True)
             catalog = RuleCatalog("darwin", {"HOME": str(home)})
-            for path, rule_id in expected.items():
-                with self.subTest(rule_id=rule_id):
-                    self.assertEqual(catalog.match(str(path), "trash").id, rule_id)
+            for path in targets:
+                with self.subTest(path=path):
+                    self.assertIsNone(catalog.match(str(path), "trash"))
             backup = home / ".codex" / ".tmp" / "plugins-backup-example"
             backup.mkdir()
             self.assertIsNone(catalog.match(str(backup), "trash"))
+
+            # The explicit temporary root may contain generated children, but
+            # a similarly named sibling must never inherit its rule.
+            sibling = home / ".codex" / ".tmp" / "plugins-staging"
+            sibling.mkdir()
+            self.assertIsNone(catalog.match(str(sibling), "trash"))
 
     def test_windows_rule_entry_is_disabled(self) -> None:
         with self.assertRaisesRegex(RuleError, "仅支持 macOS"):

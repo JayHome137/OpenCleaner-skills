@@ -57,6 +57,21 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(inspector.inspect("/Users/test/Downloads/archive.zip"), {})
         self.assertEqual(called, [])
 
+    def test_owner_hints_use_exact_roots_and_support_xcode_root(self) -> None:
+        self.assertEqual(
+            owner_profile("/Users/test/Library/Developer/Xcode/DerivedData")["id"],
+            "xcode",
+        )
+        for path in (
+            "/Users/test/.npm/_cacache-old/content",
+            "/Users/test/.gradle/caches-other/modules",
+            "/Users/test/.codex/cache-old",
+            "/Users/test/.claude-config/cache",
+            "/Users/test/project/go-build-tool",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(owner_profile(path, None), {})
+
 
 if __name__ == "__main__":
     unittest.main()

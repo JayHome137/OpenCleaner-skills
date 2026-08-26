@@ -13,12 +13,15 @@
     "errors"
   ],
   "properties": {
-    "schema_version": {"const": "1.0"},
+    "schema_version": {"const": "1.1"},
     "generated_at": {"type": "string", "minLength": 1},
     "scan_seconds": {"type": "number", "minimum": 0},
     "system": {
       "type": "object",
-      "required": ["os", "home", "disk_total", "disk_used", "disk_free", "disks"],
+      "required": ["os", "home", "disk_total", "disk_used", "disk_free", "disks", "apfs_diagnostics"],
+      "properties": {
+        "apfs_diagnostics": {"$ref": "#/$defs/apfsDiagnostics"}
+      },
       "additionalProperties": true
     },
     "groups": {
@@ -44,7 +47,22 @@
       "properties": {
         "requested_roots": {"type": "integer", "minimum": 0},
         "completed_roots": {"type": "integer", "minimum": 0},
-        "skipped_roots": {"type": "integer", "minimum": 0}
+        "skipped_roots": {"type": "integer", "minimum": 0},
+        "cache": {
+          "type": "object",
+          "required": ["enabled", "schema_version", "ttl_seconds", "hits", "misses", "invalidated", "published", "status"],
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "schema_version": {"const": "1.1"},
+            "ttl_seconds": {"type": "integer", "minimum": 0},
+            "hits": {"type": "integer", "minimum": 0},
+            "misses": {"type": "integer", "minimum": 0},
+            "invalidated": {"type": "integer", "minimum": 0},
+            "published": {"type": "boolean"},
+            "status": {"type": "string"}
+          },
+          "additionalProperties": false
+        }
       },
       "additionalProperties": true
     },
@@ -61,6 +79,41 @@
         },
         "additionalProperties": true
       }
+    }
+  },
+  "$defs": {
+    "diagnosticStatus": {"enum": ["available", "empty", "unavailable"]},
+    "apfsDiagnostics": {
+      "type": "object",
+      "required": ["purgeable", "trash", "local_snapshots", "open_unlinked_files", "release_notes"],
+      "properties": {
+        "purgeable": {
+          "type": "object",
+          "required": ["status", "value"],
+          "properties": {"status": {"$ref": "#/$defs/diagnosticStatus"}, "value": {"type": "string"}}
+        },
+        "trash": {
+          "type": "object",
+          "required": ["status", "estimated_bytes"],
+          "properties": {"status": {"$ref": "#/$defs/diagnosticStatus"}, "estimated_bytes": {"type": "integer", "minimum": 0}}
+        },
+        "local_snapshots": {
+          "type": "object",
+          "required": ["status", "count"],
+          "properties": {"status": {"$ref": "#/$defs/diagnosticStatus"}, "count": {"type": "integer", "minimum": 0}}
+        },
+        "open_unlinked_files": {
+          "type": "object",
+          "required": ["status", "count", "estimated_bytes"],
+          "properties": {
+            "status": {"$ref": "#/$defs/diagnosticStatus"},
+            "count": {"type": "integer", "minimum": 0},
+            "estimated_bytes": {"type": "integer", "minimum": 0}
+          }
+        },
+        "release_notes": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": true

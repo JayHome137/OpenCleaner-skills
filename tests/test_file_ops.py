@@ -5,6 +5,7 @@ import os
 import stat
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -21,6 +22,7 @@ from file_ops import (
     open_in_file_manager,
 )
 from policy import SafetyPolicy
+from runtime import RuntimeInspector
 
 
 class FileOperationTests(unittest.TestCase):
@@ -28,13 +30,25 @@ class FileOperationTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(prefix="storage-file-ops-")
         self.root = Path(self.temp.name)
         self.home = self.root / "home"
-        self.target = self.home / "Library" / "Caches" / "com.example"
-        self.target.mkdir(parents=True)
+        self.target = self.home / "Downloads" / "archive.zip"
+        self.target.parent.mkdir(parents=True)
+        self.target.write_bytes(b"review")
+        old = time.time() - 3600
+        os.utime(self.target, (old, old))
         self.environment = {"HOME": str(self.home)}
-        self.policy = SafetyPolicy(
-            home=str(self.home), platform="darwin", environment=self.environment
+        inspector = RuntimeInspector(
+            "darwin",
+            checker=lambda _pattern: False,
+            tool_checker=lambda _tool: True,
+            open_file_checker=lambda _path: False,
         )
-        self.action = self.policy.authorize(str(self.target), "trash", "green")
+        self.policy = SafetyPolicy(
+            home=str(self.home),
+            platform="darwin",
+            environment=self.environment,
+            runtime_inspector=inspector,
+        )
+        self.action = self.policy.authorize(str(self.target), "reviewed_trash", "yellow")
         self.action["action_id"] = "action-1"
 
     def tearDown(self) -> None:
@@ -73,7 +87,7 @@ class FileOperationTests(unittest.TestCase):
                 "target_exists_after",
             }.issubset(entry)
         )
-        self.assertEqual(entry["rule_id"], "macos.library-cache-entry")
+        self.assertEqual(entry["rule_id"], "reviewed.user-item")
         self.assertEqual(entry["status"], "completed")
         self.assertFalse(entry["target_exists_after"])
         self.assertFalse(self.target.exists())

@@ -28,7 +28,7 @@ from runtime import RuntimeInspector
 from scan import ScanEngine, ScanTarget
 from settings import SettingsError, SettingsStore
 from server import ServerContext
-from test_policy import analysis_for
+from test_policy import analysis_for, test_catalog
 from test_server import running
 
 
@@ -40,6 +40,7 @@ class ExtendedFeatureTests(unittest.TestCase):
         self.home.mkdir()
         self.state = self.root / "state"
         self.environment = {"HOME": str(self.home)}
+        self.catalog = test_catalog(self.home)
         self.store = SettingsStore(
             str(self.home), self.environment, state_dir=self.state, volume_root=self.root / "Volumes"
         )
@@ -60,6 +61,7 @@ class ExtendedFeatureTests(unittest.TestCase):
             environment=self.environment,
             settings_store=self.store,
             runtime_inspector=inspector,
+            catalog=self.catalog,
             **kwargs,
         )
 
@@ -70,7 +72,7 @@ class ExtendedFeatureTests(unittest.TestCase):
             check=True,
         )
     def test_settings_are_private_atomic_and_protection_blocks_policy(self) -> None:
-        cache = self.home / "Library" / "Caches" / "example"
+        cache = self.home / "Library" / "Developer" / "Xcode" / "DerivedData" / "example"
         cache.mkdir(parents=True)
         settings = self.store.load()
         settings["protected_paths"] = [str(cache)]
@@ -164,7 +166,7 @@ class ExtendedFeatureTests(unittest.TestCase):
         self.assertEqual(owner["background_processes"], ["com.example.app.helper"])
 
     def test_sqlite_open_files_and_shared_apps_fail_closed(self) -> None:
-        cache = self.home / "Library" / "Caches" / "database"
+        cache = self.home / "TestTrash" / "database"
         cache.mkdir(parents=True)
         (cache / "state.db").write_bytes(b"db")
         (cache / "state.db-wal").write_bytes(b"wal")

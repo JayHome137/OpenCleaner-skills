@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import sys
 import tempfile
 import time
@@ -15,6 +16,36 @@ sys.path.insert(0, str(SCRIPTS))
 
 from policy import PolicyError, SafetyPolicy, build_action_plan, ensure_plan_fresh, parse_time
 from runtime import RuntimeInspector
+from rules import RuleCatalog
+
+
+def test_catalog(home: Path) -> RuleCatalog:
+    rules_dir = home / ".test-rules"
+    rules_dir.mkdir(parents=True, exist_ok=True)
+    data = {
+        "schema_version": "1.1",
+        "rules": [
+            {
+                "id": "test.safe-entry", "platforms": ["darwin"],
+                "root": "${HOME}/TestTrash", "min_depth": 1,
+                "actions": ["trash"], "classification": "green",
+                "recovery": "测试目标可由测试夹具重新生成。", "risk": "仅影响测试夹具。",
+                "non_targets": ["测试主目录"], "blocked_components": [],
+            },
+            {
+                "id": "macos.xcode-derived-data-entry", "platforms": ["darwin"],
+                "root": "${HOME}/Library/Developer/Xcode/DerivedData", "min_depth": 1,
+                "actions": ["trash"], "classification": "green",
+                "recovery": "测试规则不得覆盖所有者工具边界。", "risk": "仅用于失败关闭测试。",
+                "non_targets": ["Xcode 内容"], "blocked_components": [],
+            },
+        ],
+    }
+    (rules_dir / "common.json").write_text(
+        json.dumps({"schema_version": "1.1", "rules": []}), encoding="utf-8"
+    )
+    (rules_dir / "macos.json").write_text(json.dumps(data), encoding="utf-8")
+    return RuleCatalog("darwin", {"HOME": str(home)}, rules_dir=rules_dir)
 
 
 def analysis_for(home: Path, green=None, yellow=None, red=None):
@@ -22,12 +53,16 @@ def analysis_for(home: Path, green=None, yellow=None, red=None):
     for raw in green or []:
         item = dict(raw)
         item.setdefault("name", "cache")
-        item.setdefault("path", str(home / "Library" / "Caches" / "cache"))
+        # Green fixtures use an injected non-owner test rule.
+        item.setdefault(
+            "path",
+            str(home / "TestTrash" / "cache"),
+        )
         item.setdefault("size_estimate", "约 0.0 GB")
         item.setdefault("kill_processes", [])
         item.setdefault("trash_paths", [item["path"]])
         item.setdefault("commands", [])
-        item.setdefault("rule_id", "macos.library-cache-entry")
+        item.setdefault("rule_id", "test.safe-entry")
         item.setdefault("rule_reason", "test recovery")
         item.setdefault("rule_risk", "test risk")
         item.setdefault("rule_non_targets", ["test exclusion"])
@@ -57,23 +92,44 @@ class PolicyTests(unittest.TestCase):
         self.home = Path(self.temp.name) / "home"
         self.home.mkdir()
         self.environment = {"HOME": str(self.home)}
+        self.catalog = test_catalog(self.home)
+        self.runtime_inspector = RuntimeInspector(
+            "darwin",
+            checker=lambda _pattern: False,
+            tool_checker=lambda _tool: True,
+            open_file_checker=lambda _path: False,
+        )
         self.policy = SafetyPolicy(
-            home=str(self.home), platform="darwin", environment=self.environment
+            home=str(self.home),
+            platform="darwin",
+            environment=self.environment,
+            runtime_inspector=self.runtime_inspector,
+            catalog=self.catalog,
         )
 
     def tearDown(self) -> None:
         self.temp.cleanup()
 
     def make_cache(self, name: str = "com.example") -> Path:
-        path = self.home / "Library" / "Caches" / name
+        path = self.home / "TestTrash" / name
         path.mkdir(parents=True)
-        (path / "cache.bin").write_bytes(b"cache")
+        payload = path / "cache.bin"
+        payload.write_bytes(b"cache")
+        old = time.time() - 3600
+        os.utime(path, (old, old))
+        os.utime(payload, (old, old))
         return path
 
-    def test_deterministic_cache_rule_authorizes_trash(self) -> None:
+    def make_review_item(self, name: str = "archive.zip") -> Path:
+        path = self.home / "Downloads" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"review")
+        return path
+
+    def test_deterministic_test_rule_authorizes_trash(self) -> None:
         target = self.make_cache()
         action = self.policy.authorize(str(target), "trash", "green")
-        self.assertEqual(action["rule_id"], "macos.library-cache-entry")
+        self.assertEqual(action["rule_id"], "test.safe-entry")
         self.assertEqual(action["mode"], "trash")
 
     def test_recent_project_tool_outputs_are_not_authorized_as_green(self) -> None:
@@ -99,6 +155,7 @@ class PolicyTests(unittest.TestCase):
                 "darwin",
                 checker=lambda _pattern: False,
                 tool_checker=lambda _tool: True,
+                open_file_checker=lambda _path: False,
             ),
         )
         for target, rule_id in cases:
@@ -107,7 +164,10 @@ class PolicyTests(unittest.TestCase):
                 (target / "active.bin").write_bytes(b"active")
                 with self.assertRaises(PolicyError) as raised:
                     guarded.authorize(str(target), "trash", "green", rule_id)
-                self.assertEqual(raised.exception.code, "project_not_idle")
+                expected = "owner_tool_only" if rule_id in {
+                    "macos.xcode-derived-data-entry", "common.go-module-cache"
+                } else "no_matching_rule"
+                self.assertEqual(raised.exception.code, expected)
 
     def test_home_root_is_never_authorized(self) -> None:
         with self.assertRaises(PolicyError) as raised:
@@ -217,7 +277,7 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, "wrong_owner")
 
     def test_reviewed_trash_still_fails_closed_for_active_known_owner(self) -> None:
-        target = self.home / "Downloads" / "ClaudeExport"
+        target = self.home / "Downloads" / "Claude"
         target.parent.mkdir()
         target.mkdir()
         guarded = SafetyPolicy(
@@ -228,7 +288,7 @@ class PolicyTests(unittest.TestCase):
         )
         with self.assertRaises(PolicyError) as raised:
             guarded.authorize(str(target), "reviewed_trash", "yellow")
-        self.assertEqual(raised.exception.code, "owner_active")
+        self.assertEqual(raised.exception.code, "owner_tool_only")
 
     def test_sensitive_data_can_open_but_cannot_trash(self) -> None:
         target = self.home / "Library" / "Application Support" / "Example"
@@ -248,8 +308,8 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, "symlink_denied")
 
     def test_replaced_target_invalidates_plan(self) -> None:
-        target = self.make_cache()
-        action = self.policy.authorize(str(target), "trash", "green")
+        target = self.make_review_item()
+        action = self.policy.authorize(str(target), "reviewed_trash", "yellow")
         original = target.with_name("old")
         target.rename(original)
         target.mkdir()
@@ -258,17 +318,17 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, "identity_changed")
 
     def test_modified_target_invalidates_plan(self) -> None:
-        target = self.make_cache("modified") / "cache.bin"
-        action = self.policy.authorize(str(target), "trash", "green")
+        target = self.make_review_item("modified.zip")
+        action = self.policy.authorize(str(target), "reviewed_trash", "yellow")
         target.write_bytes(b"changed cache content")
         with self.assertRaises(PolicyError) as raised:
             self.policy.revalidate(action)
         self.assertEqual(raised.exception.code, "identity_changed")
 
     def test_replaced_parent_invalidates_plan_even_if_target_inode_is_reused(self) -> None:
-        target = self.make_cache("parent-swap") / "cache.bin"
-        action = self.policy.authorize(str(target), "trash", "green")
-        original_parent = target.parent.with_name("parent-swap-old")
+        target = self.make_review_item("parent-swap.zip")
+        action = self.policy.authorize(str(target), "reviewed_trash", "yellow")
+        original_parent = target.parent.with_name("Downloads-old")
         target.parent.rename(original_parent)
         target.parent.mkdir()
         os.link(original_parent / target.name, target)
@@ -286,7 +346,12 @@ class PolicyTests(unittest.TestCase):
             green=[{"name": "wrong", "path": str(target), "trash_paths": [str(target)]}],
         )
         plan = build_action_plan(
-            data, home=str(self.home), platform="darwin", environment=self.environment
+            data,
+            home=str(self.home),
+            platform="darwin",
+            environment=self.environment,
+            runtime_inspector=self.runtime_inspector,
+            catalog=self.catalog,
         )
         self.assertEqual(plan["actions"], [])
         self.assertEqual(plan["rejected"][0]["code"], "no_matching_rule")
@@ -305,7 +370,8 @@ class PolicyTests(unittest.TestCase):
             ],
         )
         plan = build_action_plan(
-            data, home=str(self.home), platform="darwin", environment=self.environment
+            data, home=str(self.home), platform="darwin", environment=self.environment,
+            catalog=self.catalog,
         )
         self.assertEqual(plan["actions"], [])
         self.assertEqual(plan["rejected"][0]["code"], "no_matching_rule")
@@ -317,7 +383,8 @@ class PolicyTests(unittest.TestCase):
             green=[{"name": "cache", "path": str(target), "trash_paths": [str(target)]}],
         )
         plan = build_action_plan(
-            data, home=str(self.home), platform="darwin", environment=self.environment
+            data, home=str(self.home), platform="darwin", environment=self.environment,
+            catalog=self.catalog,
         )
         after_expiry = parse_time(plan["expires_at"]) + timedelta(seconds=1)
         with self.assertRaises(PolicyError) as raised:
@@ -331,11 +398,16 @@ class PolicyTests(unittest.TestCase):
             green=[{"name": "cache", "path": str(target), "trash_paths": [str(target)]}],
         )
         plan = build_action_plan(
-            data, home=str(self.home), platform="darwin", environment=self.environment
+            data,
+            home=str(self.home),
+            platform="darwin",
+            environment=self.environment,
+            runtime_inspector=self.runtime_inspector,
+            catalog=self.catalog,
         )
         self.assertEqual(plan["purpose"], "dry-run")
         self.assertTrue(plan["dry_run"])
-        self.assertEqual(plan["actions"][0]["risk"], "应用首次启动可能变慢，离线内容可能需要重新下载。")
+        self.assertEqual(plan["actions"][0]["risk"], "仅影响测试夹具。")
         self.assertTrue(plan["actions"][0]["non_targets"])
 
     def test_analysis_home_must_match_policy_home(self) -> None:
@@ -352,7 +424,7 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, "home_mismatch")
 
     def test_active_and_unknown_owner_processes_are_rejected_from_plan(self) -> None:
-        target = self.home / ".npm" / "_cacache"
+        target = self.home / "Library" / "Developer" / "Xcode" / "DerivedData" / "Current"
         target.mkdir(parents=True)
         old = time.time() - 3600
         os.utime(target, (old, old))
@@ -363,16 +435,17 @@ class PolicyTests(unittest.TestCase):
                     "name": "npm cache",
                     "path": str(target),
                     "trash_paths": [str(target)],
-                    "rule_id": "common.npm-content-cache",
+                    "rule_id": "macos.xcode-derived-data-entry",
                 }
             ],
         )
-        for process_state, expected in ((True, "owner_active"), (None, "runtime_unknown")):
+        for process_state, expected in ((True, "owner_tool_only"), (None, "owner_tool_only")):
             with self.subTest(process_state=process_state):
                 inspector = RuntimeInspector(
                     "darwin",
                     checker=lambda _pattern, value=process_state: value,
                     tool_checker=lambda _tool: True,
+                    open_file_checker=lambda _path: False,
                 )
                 plan = build_action_plan(
                     data,
@@ -384,16 +457,16 @@ class PolicyTests(unittest.TestCase):
                 self.assertEqual(plan["actions"], [])
                 self.assertEqual(plan["rejected"][0]["code"], expected)
 
-    def test_process_started_after_plan_invalidates_action(self) -> None:
-        target = self.home / ".npm" / "_cacache"
+    def test_owner_managed_xcode_target_is_rejected_before_process_checks(self) -> None:
+        target = self.home / "Library" / "Developer" / "Xcode" / "DerivedData" / "Current"
         target.mkdir(parents=True)
         old = time.time() - 3600
         os.utime(target, (old, old))
-        state = {"active": False}
         inspector = RuntimeInspector(
             "darwin",
-            checker=lambda _pattern: state["active"],
+            checker=lambda _pattern: False,
             tool_checker=lambda _tool: True,
+            open_file_checker=lambda _path: False,
         )
         guarded = SafetyPolicy(
             home=str(self.home),
@@ -401,14 +474,9 @@ class PolicyTests(unittest.TestCase):
             environment=self.environment,
             runtime_inspector=inspector,
         )
-        action = guarded.authorize(
-            str(target), "trash", "green", "common.npm-content-cache"
-        )
-        self.assertEqual(action["runtime"]["state"], "inactive")
-        state["active"] = True
         with self.assertRaises(PolicyError) as raised:
-            guarded.revalidate(action)
-        self.assertEqual(raised.exception.code, "owner_active")
+            guarded.authorize(str(target), "trash", "green", "macos.xcode-derived-data-entry")
+        self.assertEqual(raised.exception.code, "owner_tool_only")
 
 
 if __name__ == "__main__":

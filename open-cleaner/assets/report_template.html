@@ -17,6 +17,7 @@
     --green-soft: #e9f8ee;
     --amber: #b95e00;
     --amber-soft: #fff4df;
+    --yellow-soft: #fff4df;
     --red: #c93636;
     --red-soft: #fff0ee;
     --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 8px 24px rgba(16, 24, 40, .05);
@@ -145,6 +146,29 @@
   }
   .system-grid > div { min-width: 0; overflow-wrap: anywhere; }
   .system-grid b { color: var(--muted); font-weight: 500; }
+  .decision-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; overflow: hidden; }
+  .decision-column { min-width: 0; padding: 18px; background: var(--surface); }
+  .decision-column h3 { margin: 0 0 10px; font-size: 14px; }
+  .decision-row { display: flex; justify-content: space-between; gap: 10px; padding: 5px 0; border-bottom: 1px solid #edf0f3; }
+  .decision-row:last-child { border-bottom: 0; }
+  .decision-row span { min-width: 0; color: var(--muted); overflow-wrap: anywhere; }
+  .decision-row b { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+  .owner-list { overflow: hidden; }
+  .owner-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 18px; padding: 13px 16px; border-bottom: 1px solid var(--border); }
+  .owner-row:last-child { border-bottom: 0; }
+  .owner-main { min-width: 0; }
+  .owner-main b, .owner-main span { display: block; overflow-wrap: anywhere; }
+  .owner-main span { color: var(--muted); font-size: 12px; }
+  .owner-size { color: var(--blue); font-weight: 700; white-space: nowrap; }
+  .owner-policy { grid-column: 1 / -1; color: var(--muted); font-size: 12px; }
+  .coverage-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .coverage-panel { min-width: 0; }
+  .coverage-panel h3 { margin: 0 0 6px; font-size: 14px; }
+  .coverage-panel p { margin: 4px 0; color: var(--muted); }
+  .full-details { margin-bottom: 26px; }
+  .full-details > summary { min-height: 42px; padding: 10px 14px; cursor: pointer; font-size: 16px; font-weight: 700; }
+  .full-details-content { padding: 14px 14px 1px; border-top: 1px solid var(--border); }
+  .evidence-list { margin: 4px 0 0; padding-left: 20px; }
 
   .table-frame { width: 100%; min-width: 0; max-width: 100%; overflow: auto; contain: inline-size; clip-path: inset(0); }
   table { width: 100%; min-width: 730px; border-collapse: collapse; }
@@ -335,6 +359,8 @@
     .metric { min-width: 0; }
     .metric-value { font-size: 16px; overflow-wrap: anywhere; }
     .system-grid { grid-template-columns: 1fr; }
+    .decision-grid, .coverage-grid { grid-template-columns: 1fr; }
+    .owner-row { grid-template-columns: minmax(0, 1fr) auto; }
     table { min-width: 0; table-layout: fixed; }
     th:nth-child(1), td:nth-child(1) { width: 34px; }
     th:nth-child(2), td:nth-child(2) { width: 34px; }
@@ -371,19 +397,11 @@
   <div id="report-content"></div>
   <footer>open-cleaner · 扫描只读 · 文件操作需策略授权和确认</footer>
 </main>
-<div class="batch-bar" id="batch-bar" aria-live="polite">
-  <div class="batch-summary"><b id="batch-title"></b><span id="batch-detail"></span></div>
-  <div class="batch-actions"><button class="action-button secondary" id="batch-clear" type="button">取消选择</button><button class="action-button primary" id="batch-submit" type="button">移入废纸篓</button></div>
-</div>
-<dialog id="confirm-dialog">
-  <div class="confirm-head"><h2>确认移入废纸篓</h2><p id="confirm-summary"></p></div>
-  <div class="confirm-body"><div id="confirm-policy">服务端将在执行前重新验证整批目标的规则、路径、运行状态、文件身份和父目录。</div><div class="confirm-list" id="confirm-list"></div><label class="review-ack" id="review-ack"><input id="review-ack-input" type="checkbox"><span>我已逐项核对这些黄灯目标，确认它们不是唯一副本、活动项目、应用数据或仍在使用的临时内容。</span></label><div class="batch-progress" id="confirm-progress" aria-live="polite"></div></div>
-  <div class="confirm-actions"><button class="action-button secondary" id="confirm-cancel" type="button">取消</button><button class="action-button primary" id="confirm-submit" type="button">确认移入废纸篓</button></div>
-</dialog>
 
 <script>
 "use strict";
 const REPORT = __REPORT_DATA__;
+const DECISION = __DECISION_DATA__;
 const SESSION = __DELETE_CONFIG__;
 
 const h = value => String(value == null ? "" : value).replace(/[&<>"']/g, char => ({
@@ -412,6 +430,49 @@ function bytesLabel(value) {
   while (size >= 1024 && unit < units.length - 1) { size /= 1024; unit += 1; }
   const digits = unit === 0 ? 0 : 1;
   return `${sign}${size.toFixed(digits)} ${units[unit]}`;
+}
+
+function bytesPlain(value) {
+  return bytesLabel(Math.max(0, Number(value || 0))).replace(/^\+/, "");
+}
+
+function decisionRow(label, bucket) {
+  const value = bucket || {count: 0, size_bytes: 0};
+  return `<div class="decision-row"><span>${h(label)} · ${h(value.count || 0)} 项</span><b>${h(bytesPlain(value.size_bytes))}</b></div>`;
+}
+
+function decisionSection() {
+  const discovery = DECISION && DECISION.discovery || {};
+  const actionable = DECISION && DECISION.actionable || {};
+  const blocked = DECISION && DECISION.blocked || {count: 0, size_bytes: 0, reasons: []};
+  const reasons = (blocked.reasons || []).slice(0, 3).map(item =>
+    `<div class="decision-row"><span>${h(item.message || item.code)} · ${h(item.count)} 项</span><b>${h(bytesPlain(item.size_bytes))}</b></div>`
+  ).join("") || `<div class="action-help">当前没有策略阻止项</div>`;
+  return `<section class="block"><h2 class="block-title">当前决策</h2><div class="surface decision-grid">
+    <div class="decision-column"><h3>扫描发现</h3>${decisionRow("规则候选", discovery.green)}${decisionRow("需要解释", discovery.yellow)}${decisionRow("只展示 / 保留", discovery.red)}</div>
+    <div class="decision-column"><h3>现在可行动</h3>${decisionRow("安全移入废纸篓", actionable.trash)}${decisionRow("逐项人工复核", actionable.reviewed_trash)}${decisionRow("只打开查看", actionable.open)}</div>
+    <div class="decision-column"><h3>当前被阻止 · ${h(blocked.count || 0)} 项 · ${h(bytesPlain(blocked.size_bytes))}</h3>${reasons}</div>
+  </div></section>`;
+}
+
+function ownerGroupsSection(groups) {
+  if (!groups || !groups.length) return "";
+  const rows = groups.slice(0, 8).map(group => `<div class="owner-row"><div class="owner-main"><b>${h(group.owner)}</b><span>${h(group.source)} · ${h(group.item_count)} 项 · ${h(group.highest_tier)}</span></div><div class="owner-size">${h(compactSize(group.size))}</div><div class="owner-policy">${h(group.summary)}</div></div>`).join("");
+  return `<section class="block"><h2 class="block-title">优先查看的所有者 <span class="block-count">显示前 ${Math.min(8, groups.length)} / ${groups.length} 组</span></h2><div class="surface owner-list">${rows}</div></section>`;
+}
+
+function coverageAndApfsSection() {
+  const coverage = REPORT.coverage_assessment || {};
+  const apfs = REPORT.system && REPORT.system.apfs_diagnostics || {};
+  const purgeable = apfs.purgeable || {};
+  const trash = apfs.trash || {};
+  const snapshots = apfs.local_snapshots || {};
+  const opened = apfs.open_unlinked_files || {};
+  const limitations = (coverage.limitations || []).map(value => `<li>${h(value)}</li>`).join("");
+  return `<section class="block"><h2 class="block-title">覆盖可信度与 APFS 空间解释</h2><div class="surface guidance coverage-grid">
+    <div class="coverage-panel"><h3>${h(coverage.label || "覆盖状态未知")}</h3><p>扫描根完成率 ${h(((coverage.completed_ratio || 0) * 100).toFixed(1))}% · 权限拒绝 ${h(coverage.permission_denied || 0)} · 跳过根 ${h(coverage.skipped_roots || 0)}</p>${limitations ? `<ul>${limitations}</ul>` : ""}<p>${h(coverage.rescan_advice || "")}</p></div>
+    <div class="coverage-panel"><h3>空间可能延迟释放</h3><p>系统 purgeable：${h(purgeable.status === "available" ? purgeable.value : "无法读取")}</p><p>废纸篓估算：${h(trash.status === "unavailable" ? "无法读取" : bytesPlain(trash.estimated_bytes))} · 本地快照：${h(snapshots.status === "unavailable" ? "无法读取" : snapshots.count + " 个")}</p><p>已删除但仍打开：${h(opened.status === "unavailable" ? "无法读取" : opened.count + " 个 / " + bytesPlain(opened.estimated_bytes))}</p><p>OpenCleaner 不清空废纸篓、不删除快照；移入废纸篓后不等于空间已经释放。</p></div>
+  </div></section>`;
 }
 
 function actionIndex() {
@@ -466,7 +527,7 @@ function runtimePanel(item) {
   const commandText = commands.length
     ? `<div class="command-list">${commands.map(command => `<code>${h(command)}</code>`).join("")}</div>`
     : "";
-  return `<div class="detail"><div class="detail-title">所有者工具：${h(tool.name || runtime.id)}</div><div class="runtime-state ${h(state)}"><span class="runtime-dot"></span><span>${h(labels[state] || labels.analysis)}</span></div>${commandText}<div class="action-help">命令仅供复核，OpenCleaner 不会代为执行。</div></div>`;
+  return `<div class="detail"><div class="detail-title">所有者工具：${h(tool.name || runtime.id)}</div><div class="runtime-state ${h(state)}"><span class="runtime-dot"></span><span>${h(labels[state] || labels.analysis)}</span></div>${commandText}<div class="action-help">命令仅供复核；OpenCleaner 不会执行这些命令，也不会开放删除入口。</div></div>`;
 }
 
 function selectedActions() {
@@ -481,7 +542,7 @@ function sessionSection() {
   const rescan = SESSION.rescan_endpoint
     ? `<button class="action-button secondary" type="button" id="rescan-button">重新扫描</button>`
     : "";
-  return `<section class="block surface session-bar"><div class="session-copy"><div class="session-title">受控清理会话</div><div class="session-detail">${trashCount} 个绿灯目标可处置${reviewedCount ? ` · ${reviewedCount} 个黄灯目标可人工复核` : ""} · 会话有效至 ${h(expires)}</div></div>${rescan}</section>`;
+  return `<section class="block surface session-bar"><div class="session-copy"><div class="session-title">受控清理会话</div><div class="session-detail">${trashCount} 个目标通过实时重验，可安全移入废纸篓${reviewedCount ? ` · ${reviewedCount} 个受限目标可逐项人工复核` : ""} · 会话有效至 ${h(expires)}</div></div>${rescan}</section>`;
 }
 
 function workspaceSection() {
@@ -585,9 +646,9 @@ function segments(system, summary) {
   const used = sizeInGb(system.disk_used);
   const stats = summary && summary.tier_stats || {};
   const values = [
-    ["green", sizeInGb(stats.green), "可自动清"],
-    ["amber", sizeInGb(stats.yellow), "需手动"],
-    ["red", sizeInGb(stats.red), "谨慎清理"]
+    ["green", sizeInGb(stats.green), "规则候选"],
+    ["amber", sizeInGb(stats.yellow), "需要解释"],
+    ["red", sizeInGb(stats.red), "只展示 / 保留"]
   ];
   const known = values.reduce((sum, item) => sum + item[1], 0);
   values.push(["blue", Math.max(0, used - known), "系统及其他"]);
@@ -606,13 +667,13 @@ function overview(system, summary) {
     return `<div class="disk-row"><span class="disk-name">${h(disk.name)}</span><div class="disk-track"><span style="width:${percent.toFixed(1)}%"></span></div><span class="disk-value">${h(disk.used)} / ${h(disk.total)}</span></div>`;
   }).join("");
   const coverageText = coverage.requested_roots == null ? "未提供" : `${h(coverage.completed_roots)} / ${h(coverage.requested_roots)} 个根目录`;
-  const legend = [["green", "可自动清", stats.green], ["yellow", "需手动", stats.yellow], ["red", "谨慎清理", stats.red]]
+  const legend = [["green", "规则候选", stats.green], ["yellow", "需要解释", stats.yellow], ["red", "只展示 / 保留", stats.red]]
     .map(([tone, label, value]) => `<span class="legend-chip"><span class="level-dot ${tone}"></span>${label} <b>${h(compactSize(value || "约 0 GB"))}</b></span>`).join("");
   return `<section class="block surface overview">
     <div class="metric-grid">
       ${metric("总容量", system.disk_total)}${metric("已用", system.disk_used)}${metric("可用", system.disk_free)}${system.purgeable ? metric("可清除（系统）", system.purgeable) : ""}
     </div>
-    <div class="capacity-label">${disks.length > 1 ? `系统盘 ${h(system.disk_name || "")} · ` : ""}已用空间按清理分级着色</div>
+    <div class="capacity-label">${disks.length > 1 ? `系统盘 ${h(system.disk_name || "")} · ` : ""}扫描发现按证据等级着色，不代表当前操作授权</div>
     <div class="capacity-track">${segments(system, summary)}</div>
     <div class="legend">${legend}</div>
     ${diskRows ? `<div class="disk-list"><div class="disk-list-title">其他磁盘</div>${diskRows}</div>` : ""}
@@ -665,12 +726,12 @@ function selectionControl(item, tier) {
 }
 
 function actionPanel(item, tier) {
-  if (!SESSION) return "";
+  const runtime = runtimePanel(item);
+  if (!SESSION) return runtime;
   const trashIds = idsFor(item.trash_paths || [], "trash");
   const reviewedIds = idsFor(item.reviewed_trash_paths || [], "reviewed_trash");
   const openPaths = tier === "red" ? (item.app_paths || []) : (item.path ? [item.path] : []);
   const openIds = idsFor(openPaths, "open");
-  const runtime = runtimePanel(item);
   if (!trashIds.length && !reviewedIds.length && !openIds.length) return runtime;
   const buttons = [
     actionButton(`在${managerName}中打开`, "open", openIds),
@@ -680,8 +741,26 @@ function actionPanel(item, tier) {
   return `${runtime}<div class="detail action-panel"><div class="detail-title">受控操作</div><div class="action-row">${buttons}<span class="action-state" aria-live="polite"></span></div><div class="action-help">页面只提交短期操作 ID；服务端会重新验证规则、真实路径、运行状态和文件身份。移到废纸篓可恢复，清空后才释放空间。</div></div>${selectionControl(item, tier)}`;
 }
 
+function mutationDecision(item, mode) {
+  const paths = mode === "trash" ? (item.trash_paths || []) : (item.reviewed_trash_paths || []);
+  const authorized = DECISION && DECISION.authorized || [];
+  const rejected = DECISION && DECISION.rejected_items || [];
+  const allowed = authorized.find(action => action.mode === mode && paths.includes(action.path));
+  const blocked = rejected.find(action => action.mode === mode && paths.includes(action.path));
+  return {allowed, blocked};
+}
+
 function disposition(item, tier) {
   if (tier === "green") {
+    const state = mutationDecision(item, "trash");
+    if (state.blocked) return {
+      tone: "blocked", short: "当前被阻止", title: "实时重验未通过",
+      explanation: state.blocked.message || "当前状态不满足安全处置条件。"
+    };
+    if (!state.allowed) return {
+      tone: "needs-review", short: "等待实时重验", title: "只是规则候选",
+      explanation: "分类规则认为目标可恢复，但尚无当前 action plan 授权，不能据此直接处理。"
+    };
     return {
       tone: "can-trash",
       short: "可移入废纸篓",
@@ -690,6 +769,15 @@ function disposition(item, tier) {
     };
   }
   if (tier === "yellow" && item.reviewed_trash_paths && item.reviewed_trash_paths.length) {
+    const state = mutationDecision(item, "reviewed_trash");
+    if (state.blocked) return {
+      tone: "blocked", short: "当前被阻止", title: "人工复核入口已禁用",
+      explanation: state.blocked.message || "当前状态不满足受限人工复核条件。"
+    };
+    if (!state.allowed) return {
+      tone: "needs-review", short: "等待实时重验", title: "尚未授权人工复核",
+      explanation: "这是受限复核候选；只有当前 action plan 通过实时检查后才会出现复核入口。"
+    };
     return {
       tone: "needs-review",
       short: "需人工复核",
@@ -698,11 +786,14 @@ function disposition(item, tier) {
     };
   }
   if (tier === "yellow") {
+    const tool = item.runtime && item.runtime.owner_tool;
     return {
       tone: "blocked",
-      short: "当前不建议删除",
-      title: "当前不建议删除",
-      explanation: "没有确定性规则或受限复核授权证明整个项目可安全处置；请按下方建议在所属应用或访达中核对。"
+      short: tool ? "仅由所有者管理" : "当前不建议删除",
+      title: tool ? "不提供直接删除入口" : "当前不建议删除",
+      explanation: tool
+        ? "此目标由应用或开发工具管理。OpenCleaner 只展示原因和建议命令，不会执行命令，也不会开放删除入口。"
+        : "没有确定性规则或受限复核授权证明整个项目可安全处置；请按下方建议在所属应用或访达中核对。"
     };
   }
   return {
@@ -714,6 +805,8 @@ function disposition(item, tier) {
 }
 
 function ownerName(item, tier) {
+  const evidenceOwner = item.evidence && item.evidence.owner;
+  if (evidenceOwner && evidenceOwner !== "未识别") return evidenceOwner;
   const runtimeOwner = item.runtime && item.runtime.owner_tool && item.runtime.owner_tool.name;
   if (runtimeOwner) return runtimeOwner;
   if (tier === "red" && String(item.path || "").toLowerCase().endsWith(".app")) return item.name || "未命名应用";
@@ -734,11 +827,22 @@ function decisionBasis(item, tier) {
   return item.why_keep || "应用本体不属于自动处置范围。";
 }
 
+function evidencePanel(item) {
+  const evidence = item.evidence;
+  if (!evidence) return "";
+  const confidence = {high: "高", medium: "中", low: "低"}[evidence.confidence] || "未知";
+  const sources = (evidence.sources || []).map(value => `<li>${h(value)}</li>`).join("");
+  const children = (evidence.largest_children || []).map(value => `<li>${h(value.name)} · ${h(bytesPlain(value.size_bytes))}</li>`).join("");
+  const unknown = evidence.unknown_reason ? `<div class="action-help">仍不确定：${h(evidence.unknown_reason)}</div>` : "";
+  return `<div class="detail"><div class="detail-title">证据与置信度 · ${h(confidence)}</div>${sources ? `<ul class="evidence-list">${sources}</ul>` : ""}${children ? `<div class="detail-title">最大直接子项</div><ul class="evidence-list">${children}</ul>` : ""}<div class="action-help">建议：${h(evidence.recommended_owner_action || "只读查看")}</div>${unknown}</div>`;
+}
+
 function findingBody(item, tier) {
   const verdict = disposition(item, tier);
   const summary = `<div class="disposal-verdict ${h(verdict.tone)}"><b>${h(verdict.title)}</b><span>${h(verdict.explanation)}</span></div>${detail("归属应用 / 工具", h(ownerName(item, tier)))}${detail("主要作用", h(purposeText(item, tier)))}${detail("判断依据", h(decisionBasis(item, tier)))}`;
   const owner = ownershipPanel(item);
   const project = projectArtifactPanel(item);
+  const evidence = evidencePanel(item);
   const protection = protectionPanel(item);
   if (tier === "green") {
     const processes = item.kill_processes && item.kill_processes.length ? item.kill_processes.map(value => `<span class="tag">${h(value)}</span>`).join("") : `<span class="action-help">无需关闭任何进程</span>`;
@@ -748,17 +852,22 @@ function findingBody(item, tier) {
     return `${summary}${owner}${detail("规则风险", h(item.rule_risk || "首次使用时可能需要重建缓存。"))}${detail("不在规则范围内", exclusions)}${detail("清理前需关闭", processes)}${detail("可选命令（自行确认后执行）", commandBlocks(item.commands))}${actionPanel(item, tier)}${protection}`;
   }
   if (tier === "yellow") {
-    return `${summary}${owner}${project}${detail("建议处理方式", h(item.disposal))}${item.risk ? `<div class="risk-note">${h(item.risk)}</div>` : ""}${actionPanel(item, tier)}${protection}`;
+    return `${summary}${owner}${evidence}${project}${detail("建议处理方式", h(item.disposal))}${item.risk ? `<div class="risk-note">${h(item.risk)}</div>` : ""}${actionPanel(item, tier)}${protection}`;
   }
-  return `${summary}${owner}${detail("卸载 / 释放建议", h(item.indirect_release))}${item.auto_reclaim ? detail("是否自动回收", h(item.auto_reclaim)) : ""}${actionPanel(item, tier)}${protection}`;
+  return `${summary}${owner}${evidence}${detail("卸载 / 释放建议", h(item.indirect_release))}${item.auto_reclaim ? detail("是否自动回收", h(item.auto_reclaim)) : ""}${actionPanel(item, tier)}${protection}`;
 }
 
 function projectArtifactPanel(item) {
   const project = item.project_artifact;
+  const stage = item.stage_status || {};
+  if (!project && stage.code) {
+    return detail("项目阶段门", `<b>当前不可处理：${h(stage.code)}</b><br>解除条件：完成项目清单、Git checkpoint、ignored/untracked、静置期和打开文件检查后重新扫描。`);
+  }
   if (!project) return "";
+  const state = stage.state === "ready" ? "阶段门已通过，可进入黄灯人工复核" : `阶段门未通过：${stage.code || "未知原因"}`;
   return detail(
     "项目产物证据",
-    `构建系统：${h(project.build_system)}<br>生成物：${h(project.artifact_kind)}<br>项目根：${h(project.project_root)}<br>静置门槛：${h(Math.round(project.idle_seconds / 60))} 分钟`
+    `<b>${h(state)}</b><br>构建系统：${h(project.build_system)}<br>生成物：${h(project.artifact_kind)}<br>项目根：${h(project.project_root)}<br>静置门槛：${h(Math.round(project.idle_seconds / 60))} 分钟`
   );
 }
 
@@ -786,7 +895,7 @@ function protectionPanel(item) {
 
 function installerSection(items) {
   if (!items || !items.length) return "";
-  return `<section class="block"><h2 class="block-title">安装包专项视图 <span class="block-count">${items.length} 项</span></h2><div class="installer-grid">${items.map(item => `<article class="installer-item"><h3>${h(item.format)} · ${h(item.name)}</h3><dl><dt>大小</dt><dd>${h(bytesLabel(item.size_bytes).replace(/^\+/, ""))}</dd><dt>安装状态</dt><dd>${h(item.installed_state)}</dd><dt>来源</dt><dd>${h(item.source || "未读取到下载来源")}</dd><dt>最后使用</dt><dd>${h(new Date(item.last_used_at).toLocaleString())}</dd><dt>唯一副本</dt><dd>${h(item.unique_copy_risk)}</dd><dt>路径</dt><dd>${h(item.path)}</dd></dl></article>`).join("")}</div></section>`;
+  return `<section class="block"><h2 class="block-title">安装包专项视图 <span class="block-count">${items.length} 项</span></h2><div class="installer-grid">${items.map(item => `<article class="installer-item"><h3>${h(item.format)} · ${h(item.name)}</h3><dl><dt>大小</dt><dd>${h(bytesLabel(item.size_bytes).replace(/^\+/, ""))}</dd><dt>安装状态</dt><dd>${h(item.installed_state)}</dd><dt>来源</dt><dd>${h(item.source || "未读取到下载来源")}</dd><dt>最后使用</dt><dd>${h(new Date(item.last_used_at).toLocaleString())}</dd><dt>签名</dt><dd>${h(item.signature_state || "未验证")}</dd><dt>镜像状态</dt><dd>${h(item.mount_state || "不适用")}</dd><dt>唯一副本</dt><dd>${h(item.unique_copy_risk)}</dd><dt>副本证据</dt><dd>${h(item.duplicate_evidence || "需人工确认")}</dd><dt>路径</dt><dd>${h(item.path)}</dd></dl></article>`).join("")}</div></section>`;
 }
 
 function detail(label, content) {
@@ -811,6 +920,15 @@ function findingsSection(title, items, tier) {
   }
   const tools = `<span class="block-tools"><button class="action-button secondary section-toggle section-expand" type="button" data-expanded="true">展开全部</button><button class="action-button secondary section-toggle section-collapse" type="button" data-expanded="false" disabled>收起全部</button>${selection}</span>`;
   return `<section class="block findings-section" data-tier="${h(tier)}"><h2 class="block-title">${h(title)} <span class="block-count">${items.length} 项</span>${tools}</h2>${items.map(item => finding(item, tier)).join("")}</section>`;
+}
+
+function fullDetails() {
+  const content = findingsSection("可安全处理候选（确定性、可恢复）", REPORT.green, "green")
+    + findingsSection("需要解释或人工复核", REPORT.yellow, "yellow")
+    + findingsSection("只展示 / 建议保留", REPORT.red, "red");
+  if (!content) return "";
+  const count = (REPORT.green || []).length + (REPORT.yellow || []).length + (REPORT.red || []).length;
+  return `<details class="full-details"><summary>完整明细 · ${h(count)} 项</summary><div class="full-details-content">${content}</div></details>`;
 }
 
 function setSectionExpanded(section, expanded) {
@@ -842,6 +960,48 @@ function historySection() {
   return `<section class="block" id="operation-history" hidden><h2 class="block-title">本次操作历史</h2><div class="surface guidance history-list"></div></section>`;
 }
 
+function historicalSection() {
+  const history = DECISION && DECISION.history || {status: "empty", entries: []};
+  const comparison = DECISION && DECISION.comparison;
+  const comparisonBlock = comparison ? `<div class="history-entry"><b>最近一次重新扫描对比</b><div class="history-meta">${h(comparison.previous_generated_at)} → ${h(comparison.current_generated_at)} · 总扫描占用变化 ${bytesLabel(comparison.total.delta_bytes || 0)} · 覆盖 ${h(comparison.coverage.previous)} → ${h(comparison.coverage.current)}</div></div>` : "";
+  if (history.status === "unavailable") {
+    return `<section class="block"><h2 class="block-title">历史操作摘要</h2><div class="surface guidance"><p>历史日志当前不可读取：${h(history.message || "未知原因")}</p></div></section>`;
+  }
+  const entries = history.entries || [];
+  const rows = entries.map(item => {
+    const ok = item.status === "completed";
+    const delta = item.disk_free_delta_bytes == null ? "" : ` · 磁盘可用空间变化 ${bytesLabel(item.disk_free_delta_bytes)}`;
+    const verified = ["trash", "reviewed_trash"].includes(item.mode) ? ` · 原路径复核 ${item.target_exists_after === false ? "已移走" : "未通过"}` : "";
+    return `<div class="history-entry ${ok ? "ok" : "error"}"><b>${ok ? "完成" : "失败"} · ${h(item.mode)}</b><div class="history-meta">${h(item.timestamp)}${item.rule_id ? ` · ${h(item.rule_id)}` : ""}${h(delta)}${h(verified)}</div>${item.path ? `<div class="history-path">${h(item.path)}</div>` : ""}${item.error ? `<div class="action-state error">${h(item.error)}</div>` : ""}</div>`;
+  }).join("");
+  const lead = entries.length
+    ? `最近 ${entries.length} 条最终结果 · 完成 ${history.completed || 0} · 失败 ${history.failed || 0} · 磁盘可用空间累计变化 ${bytesLabel(history.disk_delta_bytes || 0)}`
+    : "尚无跨会话操作记录。";
+  return `<section class="block"><h2 class="block-title">历史操作与扫描对比</h2><div class="surface guidance"><p>${h(lead)}</p><div class="history-list">${comparisonBlock}${rows}</div></div></section>`;
+}
+
+function installSessionControls() {
+  if (!SESSION || document.getElementById("batch-bar")) return;
+  document.body.insertAdjacentHTML("beforeend", `<div class="batch-bar" id="batch-bar" aria-live="polite">
+    <div class="batch-summary"><b id="batch-title"></b><span id="batch-detail"></span></div>
+    <div class="batch-actions"><button class="action-button secondary" id="batch-clear" type="button">取消选择</button><button class="action-button primary" id="batch-submit" type="button">移入废纸篓</button></div>
+  </div>
+  <dialog id="confirm-dialog">
+    <div class="confirm-head"><h2>确认移入废纸篓</h2><p id="confirm-summary"></p></div>
+    <div class="confirm-body"><div id="confirm-policy">服务端将在执行前重新验证整批目标的规则、路径、运行状态、文件身份和父目录。</div><div class="confirm-list" id="confirm-list"></div><label class="review-ack" id="review-ack"><input id="review-ack-input" type="checkbox"><span>我已逐项核对这些黄灯目标，确认它们不是唯一副本、活动项目、应用数据或仍在使用的临时内容。</span></label><div class="batch-progress" id="confirm-progress" aria-live="polite"></div></div>
+    <div class="confirm-actions"><button class="action-button secondary" id="confirm-cancel" type="button">取消</button><button class="action-button primary" id="confirm-submit" type="button">确认移入废纸篓</button></div>
+  </dialog>`);
+  // These controls are created above, so bind their handlers only after the
+  // session shell exists. Binding them at script load would abort mount().
+  document.getElementById("batch-clear").addEventListener("click", () => setSelected([...SELECTED], false));
+  document.getElementById("batch-submit").addEventListener("click", () => openConfirmation([...SELECTED]));
+  document.getElementById("confirm-cancel").addEventListener("click", () => document.getElementById("confirm-dialog").close());
+  document.getElementById("confirm-submit").addEventListener("click", confirmPending);
+  document.getElementById("review-ack-input").addEventListener("change", event => {
+    document.getElementById("confirm-submit").disabled = !event.target.checked;
+  });
+}
+
 function appendHistory(results, fallbackError) {
   if (!SESSION) return;
   const section = document.getElementById("operation-history");
@@ -862,6 +1022,7 @@ function appendHistory(results, fallbackError) {
 function updateBatchBar() {
   const actions = selectedActions();
   const bar = document.getElementById("batch-bar");
+  if (!bar) return;
   bar.classList.toggle("visible", actions.length > 0);
   if (!actions.length) return;
   const estimate = actions.reduce((sum, action) => {
@@ -1025,18 +1186,23 @@ async function rescanReport() {
 }
 
 function mount() {
+  installSessionControls();
   document.getElementById("report-meta").textContent = `生成于 ${REPORT.generated_at || "未知"} · 扫描耗时 ${REPORT.scan_seconds == null ? "未知" : REPORT.scan_seconds + "s"} · ${SESSION ? "受控操作模式" : "静态只读模式"}`;
   const summary = REPORT.summary || {};
-  document.getElementById("report-content").innerHTML = sessionSection()
+  // Keep the three-way decision visible before the longer evidence sections.
+  // It is the smallest useful answer for users who will not drill into HTML.
+  document.getElementById("report-content").innerHTML = decisionSection()
+    + sessionSection()
     + overview(REPORT.system || {}, summary)
+    + ownerGroupsSection(REPORT.owner_groups || [])
+    + coverageAndApfsSection()
     + workspaceSection()
     + topFive(REPORT.top5)
     + listBlock("执行建议", Array.isArray(summary.priority) ? summary.priority : [], summary.overview)
     + installerSection(REPORT.installer_packages || [])
-    + findingsSection("可自动清理（纯缓存 / 临时文件，可再生）", REPORT.green, "green")
-    + findingsSection("需你参与的手动清理（含用户数据）", REPORT.yellow, "yellow")
-    + findingsSection("谨慎清理（建议使用正规卸载或系统入口）", REPORT.red, "red")
+    + fullDetails()
     + permissions(REPORT.denied)
+    + historicalSection()
     + historySection()
     + listBlock("长期优化建议", summary.long_term || [], "");
   initializeWorkspace();
@@ -1135,13 +1301,6 @@ document.addEventListener("input", event => {
   BROWSER_STATE.searchTimer = window.setTimeout(() => browsePath(BROWSER_STATE.path), 220);
 });
 
-document.getElementById("batch-clear").addEventListener("click", () => setSelected([...SELECTED], false));
-document.getElementById("batch-submit").addEventListener("click", () => openConfirmation([...SELECTED]));
-document.getElementById("confirm-cancel").addEventListener("click", () => document.getElementById("confirm-dialog").close());
-document.getElementById("confirm-submit").addEventListener("click", confirmPending);
-document.getElementById("review-ack-input").addEventListener("change", event => {
-  document.getElementById("confirm-submit").disabled = !event.target.checked;
-});
 document.addEventListener("click", event => { if (event.target.id === "rescan-button") rescanReport(); });
 
 mount();

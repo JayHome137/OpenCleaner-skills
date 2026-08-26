@@ -14,13 +14,34 @@ ProcessChecker = Callable[[str], Optional[bool]]
 ToolChecker = Callable[[str], bool]
 OpenFileChecker = Callable[[str], Optional[bool]]
 
+# Owner profiles are explanatory metadata only. They never grant Trash.
+DIRECT_TRASH_OWNER_RULE_IDS: frozenset[str] = frozenset()
+
+
+def _under(path: str, root: str) -> bool:
+    """Return whether *path* is *root* or a descendant of the exact root."""
+    normalized_root = "/" + root.strip("/").casefold()
+    # Rules are expressed relative to a user's home (for example
+    # ``/.npm/_cacache``), so match that exact component suffix anywhere in
+    # an absolute path while rejecting similarly named siblings.
+    return path == normalized_root or path.endswith(normalized_root) or (
+        normalized_root + "/"
+    ) in path
+
+
+def _has_component(path: str, component: str) -> bool:
+    return component.casefold() in {part for part in path.split("/") if part}
+
 
 def owner_profile(path: str, rule_id: str = "") -> dict[str, Any]:
+    rule_id = str(rule_id or "")
     normalized = os.path.normcase(path).replace("\\", "/").casefold()
     basename = os.path.basename(normalized.rstrip("/"))
     profile: dict[str, Any] = {}
 
-    if rule_id == "macos.xcode-derived-data-entry":
+    if rule_id == "macos.xcode-derived-data-entry" or _under(
+        normalized, "/library/developer/xcode/deriveddata"
+    ):
         profile = {
             "id": "xcode",
             "processes": ["Xcode", "xcodebuild", "swiftc"],
@@ -31,7 +52,7 @@ def owner_profile(path: str, rule_id: str = "") -> dict[str, Any]:
                 "execution": "app-managed",
             },
         }
-    elif rule_id == "macos.pnpm-cache-entry" or "/library/pnpm/store/" in normalized:
+    elif rule_id == "macos.pnpm-cache-entry" or _under(normalized, "/library/pnpm/store"):
         profile = {
             "id": "pnpm",
             "processes": ["pnpm"],
@@ -42,7 +63,7 @@ def owner_profile(path: str, rule_id: str = "") -> dict[str, Any]:
                 "execution": "review-only",
             },
         }
-    elif rule_id == "common.npm-content-cache" or "/.npm/_cacache" in normalized:
+    elif rule_id == "common.npm-content-cache" or _under(normalized, "/.npm/_cacache"):
         profile = {
             "id": "npm",
             "processes": ["npm"],
@@ -53,7 +74,7 @@ def owner_profile(path: str, rule_id: str = "") -> dict[str, Any]:
                 "execution": "review-only",
             },
         }
-    elif rule_id == "common.gradle-cache-entry" or "/.gradle/caches/" in normalized:
+    elif rule_id == "common.gradle-cache-entry" or _under(normalized, "/.gradle/caches"):
         profile = {
             "id": "gradle",
             "processes": ["GradleDaemon"],
@@ -64,18 +85,23 @@ def owner_profile(path: str, rule_id: str = "") -> dict[str, Any]:
                 "execution": "review-only",
             },
         }
-    elif rule_id == "common.go-module-cache" or basename == "go-build" or "/go-build/" in normalized:
+    elif (
+        rule_id == "common.go-module-cache"
+        or _under(normalized, "/go/pkg/mod")
+        or basename == "go-build"
+        or _has_component(normalized, "go-build")
+    ):
         profile = {
-            "id": "go-module" if rule_id == "common.go-module-cache" else "go-build",
+            "id": "go-module" if (rule_id == "common.go-module-cache" or _under(normalized, "/go/pkg/mod")) else "go-build",
             "processes": ["go build", "go test"],
             "owner_tool": {
                 "name": "Go",
-                "inspect_command": "go env GOMODCACHE" if rule_id == "common.go-module-cache" else "go env GOCACHE",
-                "cleanup_command": "go clean -modcache" if rule_id == "common.go-module-cache" else "go clean -cache",
+                "inspect_command": "go env GOMODCACHE" if (rule_id == "common.go-module-cache" or _under(normalized, "/go/pkg/mod")) else "go env GOCACHE",
+                "cleanup_command": "go clean -modcache" if (rule_id == "common.go-module-cache" or _under(normalized, "/go/pkg/mod")) else "go clean -cache",
                 "execution": "review-only",
             },
         }
-    elif "/library/caches/google" in normalized or "chrome" in basename:
+    elif _under(normalized, "/library/caches/google") or basename == "chrome":
         profile = {
             "id": "chrome",
             "processes": ["Google Chrome"],
@@ -83,31 +109,35 @@ def owner_profile(path: str, rule_id: str = "") -> dict[str, Any]:
         }
     elif (
         rule_id.startswith("common.codex-")
-        or "/library/caches/codex" in normalized
-        or "/library/caches/com.openai.codex" in normalized
-        or "/.cache/codex-runtimes" in normalized
-        or "/.codex/cache" in normalized
-        or "/.codex/.tmp/" in normalized
-        or "/.codex/plugins/cache" in normalized
+        or _under(normalized, "/library/caches/codex")
+        or _under(normalized, "/library/caches/com.openai.codex")
+        or _under(normalized, "/.cache/codex-runtimes")
+        or _under(normalized, "/.codex/cache")
+        or _under(normalized, "/.codex/.tmp")
+        or _under(normalized, "/.codex/plugins/cache")
     ):
         profile = {
             "id": "codex",
             "processes": ["Codex"],
             "owner_tool": {"name": "Codex", "inspect_command": "", "cleanup_command": "", "execution": "app-managed"},
         }
-    elif rule_id == "common.claude-cache" or "claude" in basename or "/claude" in normalized or "/.claude/" in normalized:
+    elif (
+        rule_id == "common.claude-cache"
+        or basename == "claude"
+        or _has_component(normalized, ".claude")
+    ):
         profile = {
             "id": "claude",
             "processes": ["Claude"],
             "owner_tool": {"name": "Claude", "inspect_command": "", "cleanup_command": "", "execution": "app-managed"},
         }
-    elif "com.utmapp.utm" in normalized or basename == "utm":
+    elif _has_component(normalized, "com.utmapp.utm") or basename == "utm":
         profile = {
             "id": "utm",
             "processes": ["UTM"],
             "owner_tool": {"name": "UTM", "inspect_command": "", "cleanup_command": "", "execution": "app-managed"},
         }
-    elif "/.tart/" in normalized or basename == "tart":
+    elif _under(normalized, "/.tart") or basename == "tart":
         profile = {
             "id": "tart",
             "processes": ["tart"],
@@ -118,7 +148,7 @@ def owner_profile(path: str, rule_id: str = "") -> dict[str, Any]:
                 "execution": "review-only",
             },
         }
-    elif "/.docker/" in normalized or "orbstack" in normalized:
+    elif _under(normalized, "/.docker") or _has_component(normalized, "orbstack"):
         profile = {
             "id": "docker",
             "processes": ["Docker", "OrbStack"],
@@ -129,7 +159,7 @@ def owner_profile(path: str, rule_id: str = "") -> dict[str, Any]:
                 "execution": "review-only",
             },
         }
-    elif "wechat" in normalized or "xinwechat" in normalized:
+    elif _has_component(normalized, "wechat") or _has_component(normalized, "xinwechat"):
         profile = {
             "id": "wechat",
             "processes": ["WeChat"],

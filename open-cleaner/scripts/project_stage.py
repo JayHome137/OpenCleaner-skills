@@ -15,7 +15,7 @@ HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
-from classify import build_analysis, format_gb  # noqa: E402
+from classify import build_analysis, build_owner_groups, format_gb  # noqa: E402
 from contracts import ContractError, validate_analysis  # noqa: E402
 from project_artifacts import (  # noqa: E402
     ProjectArtifactError,
@@ -82,10 +82,20 @@ def augment_with_project_artifacts(
             "name": f"项目生成目录：{os.path.basename(path)}",
             "path": path,
             "size": format_gb(size_kb),
+            "size_bytes": size_kb * 1024,
             "content_profile": "项目构建或测试阶段产生的可重建目录。",
             "why_manual": "只有生成目录边界、项目清单、Git 状态、静置期和打开文件检查全部通过后才能移入废纸篓。",
             "disposal": "保留源码、锁文件、归档和发布产物；本目标只通过 reviewed_trash 批次确认处理。",
             "risk": "后续首次构建会变慢；若恢复契约或项目状态变化，本次计划会被拒绝。",
+            "evidence": {
+                "owner": "当前项目",
+                "confidence": "high",
+                "sources": ["项目清单与构建系统", "Git tracked/ignored 状态", "静置期与打开文件检查"],
+                "largest_children": [],
+                "content_profile": "项目构建或测试阶段产生的可重建目录。",
+                "recommended_owner_action": "仅在全部阶段门通过后，通过 reviewed_trash 二次确认处理。",
+                "unknown_reason": "",
+            },
         }
         try:
             metadata = inspect_project_artifact(path, home, env)
@@ -117,6 +127,7 @@ def augment_with_project_artifacts(
         0,
         "项目生成目录必须通过 allowlist、项目清单、Git 状态、静置期和打开文件检查，再经过 reviewed_trash 二次确认。",
     )
+    analysis["owner_groups"] = build_owner_groups(analysis)
     return validate_analysis(analysis)
 
 

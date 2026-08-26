@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,6 +18,7 @@ import classify
 import contracts
 import file_ops
 import policy
+from runtime import RuntimeInspector
 import scan
 
 
@@ -27,13 +29,16 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix="open-cleaner-mac-") as temporary:
         base = Path(temporary)
         home = base / "Users" / "alice"
-        cache_root = home / "Library" / "Caches"
+        cache_root = home / "Library" / "Developer" / "Xcode" / "DerivedData"
         cache = cache_root / "com.example.cache"
         download = home / "Downloads" / "archive.zip"
         cache.mkdir(parents=True)
         download.parent.mkdir(parents=True)
         (cache / "cache.bin").write_bytes(b"c" * 4096)
         download.write_bytes(b"d" * 2048)
+        old = time.time() - 3600
+        os.utime(cache, (old, old))
+        os.utime(cache / "cache.bin", (old, old))
 
         engine = scan.ScanEngine("darwin", max_workers=2, timeout_seconds=10)
         groups, coverage = engine.scan_targets(
@@ -62,11 +67,17 @@ def main() -> None:
         contracts.validate_scan_result(scan_result)
         environment = {"HOME": str(home)}
         analysis = classify.build_analysis(scan_result, environment=environment)
+        runtime_inspector = RuntimeInspector(
+            "darwin",
+            checker=lambda _pattern: False,
+            open_file_checker=lambda _path: False,
+        )
         dry_run = policy.build_action_plan(
             analysis,
             home=str(home),
             platform="darwin",
             environment=environment,
+            runtime_inspector=runtime_inspector,
         )
         session = policy.build_action_plan(
             analysis,
@@ -74,6 +85,7 @@ def main() -> None:
             platform="darwin",
             environment=environment,
             purpose="session",
+            runtime_inspector=runtime_inspector,
         )
         assert dry_run["dry_run"] is True
         assert session["dry_run"] is False
@@ -84,10 +96,13 @@ def main() -> None:
         build_report.build_report(str(analysis_path), str(report_path))
         assert "存储分析报告" in report_path.read_text(encoding="utf-8")
 
-        action = next(item for item in session["actions"] if item["mode"] == "trash")
+        action = next(item for item in session["actions"] if item["mode"] == "reviewed_trash")
         operator = file_ops.FileOperator(
             policy.SafetyPolicy(
-                home=str(home), platform="darwin", environment=environment
+                home=str(home),
+                platform="darwin",
+                environment=environment,
+                runtime_inspector=runtime_inspector,
             ),
             file_ops.OperationLog(base / "state"),
         )
@@ -95,7 +110,8 @@ def main() -> None:
         assert result["status"] == "completed", result
         assert result["target_exists_after"] is False
         assert "disk_free_delta_bytes" in result
-        assert not cache.exists()
+        assert cache.exists()
+        assert not download.exists()
 
     print("MACOS_SMOKE_OK")
 

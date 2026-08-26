@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -20,7 +22,7 @@ from file_ops import FileOperator, OperationLog
 from policy import PolicyError, SafetyPolicy, build_action_plan
 from runtime import RuntimeInspector
 from server import ServerContext, create_context, make_handler
-from test_policy import analysis_for
+from test_policy import analysis_for, test_catalog
 
 
 @contextmanager
@@ -43,16 +45,29 @@ class ServerContextTests(unittest.TestCase):
         self.home = self.root / "home"
         self.home.mkdir()
         self.environment = {"HOME": str(self.home)}
+        self.catalog = test_catalog(self.home)
+        self.runtime_inspector = RuntimeInspector(
+            "darwin",
+            checker=lambda _pattern: False,
+            tool_checker=lambda _tool: True,
+            open_file_checker=lambda _path: False,
+        )
         self.policy = SafetyPolicy(
-            home=str(self.home), platform="darwin", environment=self.environment
+            home=str(self.home),
+            platform="darwin",
+            environment=self.environment,
+            catalog=self.catalog,
+            runtime_inspector=self.runtime_inspector,
         )
 
     def tearDown(self) -> None:
         self.temp.cleanup()
 
     def make_cache(self, name: str) -> Path:
-        path = self.home / "Library" / "Caches" / name
+        path = self.home / "TestTrash" / name
         path.mkdir(parents=True)
+        old = time.time() - 3600
+        os.utime(path, (old, old))
         return path
 
     def make_context(self, paths, called, rescan_handler=None):
@@ -67,6 +82,8 @@ class ServerContextTests(unittest.TestCase):
             platform="darwin",
             environment=self.environment,
             purpose="session",
+            runtime_inspector=self.runtime_inspector,
+            catalog=self.catalog,
         )
         fake_trash = self.root / "fake-trash"
 
@@ -146,7 +163,7 @@ class ServerContextTests(unittest.TestCase):
         )
 
     def test_public_config_explains_runtime_rejection_without_action(self) -> None:
-        target = self.home / ".npm" / "_cacache"
+        target = self.home / "Library" / "Developer" / "Xcode" / "DerivedData" / "Current"
         target.mkdir(parents=True)
         analysis = analysis_for(
             self.home,
@@ -155,11 +172,15 @@ class ServerContextTests(unittest.TestCase):
                     "name": target.name,
                     "path": str(target),
                     "trash_paths": [str(target)],
-                    "rule_id": "common.npm-content-cache",
+                    "rule_id": "macos.xcode-derived-data-entry",
                 }
             ],
         )
-        inspector = RuntimeInspector("darwin", checker=lambda _pattern: True)
+        inspector = RuntimeInspector(
+            "darwin",
+            checker=lambda _pattern: True,
+            open_file_checker=lambda _path: False,
+        )
         policy = SafetyPolicy(
             home=str(self.home),
             platform="darwin",
@@ -183,7 +204,7 @@ class ServerContextTests(unittest.TestCase):
         )
         config = context.public_config()
         self.assertEqual(config["actions"], [])
-        self.assertEqual(config["rejected"][0]["code"], "owner_active")
+        self.assertEqual(config["rejected"][0]["code"], "owner_tool_only")
 
     def test_dry_run_plan_cannot_start_operation_session(self) -> None:
         target = self.make_cache("one")

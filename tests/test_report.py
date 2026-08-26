@@ -23,11 +23,17 @@ class ReportTests(unittest.TestCase):
     def test_report_keeps_sections_and_escapes_embedded_script_data(self) -> None:
         analysis = analysis_for(Path("/tmp/home"))
         analysis["summary"]["overview"] = "</script><script>alert(1)</script>"
-        template = "<script>const D=__REPORT_DATA__;const C=__DELETE_CONFIG__;</script>"
+        template = "<script>const D=__REPORT_DATA__;const S=__DECISION_DATA__;const C=__DELETE_CONFIG__;</script>"
         rendered = render_report(analysis, template)
         self.assertEqual(rendered.count("</script>"), 1)
         self.assertIn("\\u003c/script\\u003e", rendered)
+        self.assertIn("const S=", rendered)
         self.assertIn("const C=null", rendered)
+
+    def test_report_rejects_template_without_decision_placeholder(self) -> None:
+        analysis = analysis_for(Path("/tmp/home"))
+        with self.assertRaisesRegex(report_module.ContractError, "DECISION_DATA"):
+            render_report(analysis, "<script>const D=__REPORT_DATA__;const C=__DELETE_CONFIG__;</script>")
 
     def test_real_template_keeps_reading_order_and_contains_no_legacy_request(self) -> None:
         analysis = analysis_for(Path("/tmp/home"))
@@ -40,8 +46,13 @@ class ReportTests(unittest.TestCase):
         self.assertNotIn("authorizedPaths", rendered)
         self.assertNotIn("postAction", rendered)
         self.assertIn("const SESSION = null", rendered)
-        self.assertIn('class="batch-bar"', rendered)
-        self.assertIn('<dialog id="confirm-dialog">', rendered)
+        # The static artifact carries no action IDs or operation controls. The
+        # controlled session shell remains in the template source but is never
+        # populated when SESSION is null.
+        self.assertNotIn('data-mode="trash"', rendered)
+        self.assertNotIn('data-mode="reviewed_trash"', rendered)
+        self.assertNotIn('class="action-panel"', rendered)
+        self.assertIn("const DECISION =", rendered)
         self.assertIn('class="action-select"', template)
         self.assertNotIn("CSS.escape", template)
         self.assertIn('["owner_active", "runtime_unknown"]', template)
@@ -60,11 +71,12 @@ class ReportTests(unittest.TestCase):
         self.assertIn("\\u003c/script\\u003e", rendered)
         mount = rendered.split("function mount()", 1)[1]
         calls = [
+            ".innerHTML = decisionSection()",
+            "+ sessionSection()",
+            "+ overview(REPORT.system || {}, summary)",
             "+ topFive(REPORT.top5)",
             '+ listBlock("执行建议"',
-            '+ findingsSection("可自动清理',
-            '+ findingsSection("需你参与',
-            '+ findingsSection("谨慎清理',
+            "+ fullDetails()",
             '+ listBlock("长期优化建议"',
         ]
         positions = [mount.find(value) for value in calls]
