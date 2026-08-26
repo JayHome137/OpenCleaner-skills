@@ -1,7 +1,7 @@
 # OpenCleaner 最新状态与 Mole 核心能力差距审计
 
 > 审计日期：2026-08-26
-> OpenCleaner 基线：`1.1.0`（当前工作树；基于 `76cdd2e8056dbed034ca01bb24b71c42e648751b`，本轮修改尚未提交）
+> OpenCleaner 基线：`1.1.0`（发布候选提交 `5f7ddb0`，待远端 CI）
 > Mole 对照基线：官方 `main`，`ef2485a3a8f48c9abb11e4619635e476b1327566`
 > 范围：本机最新版验证、已安装 Skill 对账、真实只读扫描、受控报告浏览器验收、Mole 官方源码静态审计。
 
@@ -17,8 +17,8 @@ OpenCleaner 当前是一个可运行、可测试、默认失败关闭的 macOS �
 
 | 验收项 | 结果 | 当前证据与边界 |
 | --- | --- | --- |
-| 工作树版本 | 通过 | `VERSION` 为 `1.1.0`；当前 `HEAD`/`origin/main` 仍为 `76cdd2e`，本轮修改保留在未提交工作树中。 |
-| 已安装 Skill 对账 | 通过 | 安装目录中的 `open-cleaner/` 与仓库版本逐文件一致；`quick_validate.py` 返回 `Skill is valid!`。 |
+| 工作树版本 | 通过 | `VERSION` 为 `1.1.0`；发布候选提交为 `5f7ddb0`，远端 CI 待验证。 |
+| 已安装 Skill 对账 | 通过 | 安装目录中的 `open-cleaner/` 已同步到发布候选提交；`quick_validate.py` 返回 `Skill is valid!`。 |
 | 包结构与契约 | 通过 | `python3 scripts/validate_package.py` 通过；scan、analysis、action-plan 均使用 `1.1` 契约并保留 `1.0` 输入迁移。 |
 | 单元与安全回归 | 通过 | `PYTHONPATH=tests python3 -m unittest discover -s tests -p 'test_*.py' -q`：`115` 项全部通过（本轮修正后）。 |
 | macOS 临时 fixture | 通过 | `python3 tests/macos_smoke.py` 输出 `MACOS_SMOKE_OK`；Trash 只发生在临时 HOME fixture。 |
@@ -28,7 +28,7 @@ OpenCleaner 当前是一个可运行、可测试、默认失败关闭的 macOS �
 | 权限与可信度 | 部分覆盖、结论明确 | 共 `23` 个错误：`22` 个 `permission_denied`、`1` 个 `missing_root`；报告等级为“可用于初筛”，完成率 `96.0%`，不会把遗漏伪装成空目录。 |
 | Dry Run 决策 | 通过 | 计划含 `115` 个动作（`open` 105、`reviewed_trash` 10），`25` 项被阻止；当前普通 `trash` 为 `0` 项。 |
 | 报告渲染与交互 | 通过 | 受控页面在 `1440x900` 与 `390x844` 均无横向溢出或控制台错误；静态 HTML 为 `SESSION = null`，不显示文件处置入口。 |
-| 远端 CI | 仅作基线证据 | GitHub run `32703766901` 成功验证的是 `76cdd2e` 基线，不代表当前未提交的 `1.1.0` 工作树；当前结论以本机复验为准。 |
+| 远端 CI | 待发布后验证 | GitHub run `32703766901` 是旧基线；发布候选提交推送后由 `macos-validation.yml` 重新验证。 |
 
 本机真实数据仅用于验证；报告不记录真实扫描条目或个人文件名，安装目录只作为验证环境元数据。
 
@@ -146,4 +146,4 @@ Mole 代码参考：
 - 静态 HTML 虽嵌入决策数据，但没有可执行的 session/action 控件，不能通过手工请求绕过服务端操作计划。
 - Mole 只做官方源码审计，没有运行任何清理、卸载、优化或 purge 命令。
 - 本轮验证临时产物仍保留在本机专用 `/tmp` 目录，按全局项目阶段规则等待静置条件后再做精确、可恢复的 Trash-only 清理；没有删除用户文件、废纸篓内容、快照或全局状态。
-- 当前工作树仍未提交或推送；代码与已安装 Skill 在最后一次代码同步时逐文件一致。
+- 发布候选已在本地提交；推送后需以远端 CI 结果作为最终发布门槛。
