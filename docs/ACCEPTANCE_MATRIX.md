@@ -1,7 +1,7 @@
 # 1.1.0 验收矩阵
 
 > 验证日期：2026-08-26
-> 边界：实现与验证只使用仓库测试数据、系统临时目录和只读本机扫描；没有操作用户真实文件。当前 1.1.0 发布候选已本地提交，远端 runner 负责最终 CI 门禁。
+> 边界：实现与验证只使用仓库测试数据、系统临时目录和只读本机扫描；没有操作用户真实文件。当前 1.1.0 发布候选已通过本地验收和远端 macOS CI 门禁。
 
 ## 结论
 
@@ -25,7 +25,7 @@
 | 目录浏览与本地设置 | 本地通过 | 登记根内支持逐层进入、返回、搜索、名称/大小/时间排序、大小筛选和多选保护；设置文件 `0600`、状态目录 `0700`，拒绝 symlink 和越界根。 |
 | 安装包与 App 归属 | 本地通过 | DMG/PKG/ISO/XIP/ZIP 专项视图，以及 Bundle ID、显示名、容器、缓存、Application Support、登录项和后台项关系进入版本化 analysis。 |
 | 扩展运行态保护 | 本地通过 | SQLite WAL/SHM、打开文件、共享 Bundle ID、多版本 App、持久保护路径/App、活动进程和未知状态均在服务端执行前失败关闭。 |
-| macOS 端到端 | 本地通过 | 当前工作树 `python3 tests/macos_smoke.py` 输出 `MACOS_SMOKE_OK`；Trash 只处理临时 HOME fixture。历史 [macOS run 32550508546](https://github.com/JayHome137/OpenCleaner-skills/actions/runs/32550508546) 仅作旧版本记录。 |
+| macOS 端到端 | 本地与远端通过 | 当前工作树 `python3 tests/macos_smoke.py` 输出 `MACOS_SMOKE_OK`；Trash 只处理临时 HOME fixture。当前 [macOS run 32978425355](https://github.com/JayHome137/OpenCleaner-skills/actions/runs/32978425355) 通过。 |
 | Windows 公开入口 | 关闭并失败关闭 | 规则归一化、公开扫描、分类、action-plan 契约和文件操作均拒绝 Windows；自动公开入口未恢复。 |
 | Windows 实验资产 | 保留、未验证 | Windows helper、规则、参考文档和 `tests/windows_smoke.py` 留待独立测试；历史 [run 32550508708](https://github.com/JayHome137/OpenCleaner-skills/actions/runs/32550508708) 不代表当前版本。 |
 | 扫描确定性 | 通过 | 当前 macOS-only benchmark 的 1 worker 与 4 workers 输出相同 SHA-256：`8f21768b6b8ce22a0c26ee6743df17e1678a26eb588896c7a3c4885ef6b1bb12`；耗时仅作本机回归参考。 |
@@ -36,7 +36,7 @@
 | 实现独立性 | 通过（代码层） | 运行时代码、规则、契约、测试和报告不依赖 Mole 或原参考仓库主体；详见 `docs/INDEPENDENCE_AUDIT.md`。 |
 | 第三方声明 | 通过 | `THIRD_PARTY_NOTICES.md` 和 `docs/PROVENANCE.md` 保留来源及既有 MIT 义务。 |
 | 正式非商业/商业许可 | 通过 | `1.1.0` 继续采用官方 PolyForm Noncommercial 1.0.0；`NOTICE`、`COMMERCIAL_LICENSE.md` 和第三方 MIT 边界保持一致。 |
-| 远端 CI | 待发布后验证 | 历史 run `32703766901` 仅对应 `76cdd2e`；推送 `5f7ddb0` 后等待新的 macOS validation run。 |
+| 远端 CI | 通过 | [macOS run 32978425355](https://github.com/JayHome137/OpenCleaner-skills/actions/runs/32978425355) 对应 `93a6c0c`，包校验、`115` 项单元测试和 macOS 端到端 smoke 全部成功。 |
 
 ## 真实本机 Dry Run 摘要
 
