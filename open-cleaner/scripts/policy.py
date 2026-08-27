@@ -11,7 +11,13 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional, Sequence
 
-from contracts import ACTION_PLAN_SCHEMA_VERSION, canonical_sha256, validate_action_plan, validate_analysis
+from contracts import (
+    ACTION_PLAN_SCHEMA_VERSION,
+    blocked_bucket,
+    canonical_sha256,
+    validate_action_plan,
+    validate_analysis,
+)
 from project_artifacts import (
     ProjectArtifactError,
     inspect_artifact_activity,
@@ -583,23 +589,10 @@ def build_decision(
         }
         for mode in ("trash", "reviewed_trash", "open")
     }
-    reasons: dict[str, dict[str, Any]] = {}
-    for item in rejected:
-        code = str(item.get("code") or "unknown")
-        reason = reasons.setdefault(
-            code,
-            {"code": code, "message": str(item.get("message") or "已阻止"), "count": 0, "size_bytes": 0},
-        )
-        reason["count"] += 1
-        reason["size_bytes"] += int(item.get("size_estimate_bytes", 0) or 0)
     return {
         "discovery": discovery,
         "actionable": actionable,
-        "blocked": {
-            "count": len(rejected),
-            "size_bytes": sum(int(item.get("size_estimate_bytes", 0) or 0) for item in rejected),
-            "reasons": sorted(reasons.values(), key=lambda item: (-item["size_bytes"], -item["count"], item["code"])),
-        },
+        "blocked": blocked_bucket(list(actions), list(rejected)),
     }
 
 

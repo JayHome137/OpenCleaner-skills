@@ -543,7 +543,8 @@ def main() -> None:
     print(
         f"绿灯可移到废纸篓 {trash_count} 项 | 黄灯可人工复核 {reviewed_count} 项 | "
         f"可打开查看 {open_count} 项 | "
-        f"拒绝 {len(context.plan['rejected'])} 项"
+        f"动作级拒绝 {len(context.plan['rejected'])} 项 | "
+        f"完全不可行动 {context.plan['decision']['blocked']['count']} 项"
     )
     print("所有操作计划 30 分钟后失效；用完按 Ctrl+C 停止服务。")
     webbrowser.open(url)

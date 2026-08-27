@@ -9,11 +9,45 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "open-cleaner" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-from classify import build_analysis, platform_from_scan
+from classify import build_analysis, build_owner_groups, platform_from_scan
 from contracts import ContractError
 
 
 class ClassificationTests(unittest.TestCase):
+    def test_owner_groups_do_not_merge_unrelated_path_hints(self) -> None:
+        analysis = {
+            "green": [],
+            "yellow": [
+                {
+                    "name": "CloudStorage",
+                    "path": "/Users/example/Library/CloudStorage",
+                    "size_bytes": 100,
+                    "evidence": {"owner": "cloudstorage", "content_profile": "通用模板"},
+                },
+                {
+                    "name": ".cargo",
+                    "path": "/Users/example/.cargo",
+                    "size_bytes": 200,
+                    "evidence": {"owner": ".cargo", "content_profile": "通用模板"},
+                },
+                {
+                    "name": "Google",
+                    "path": "/Users/example/Library/Caches/Google",
+                    "size_bytes": 300,
+                    "ownership": {"bundle_id": "google", "app_paths": []},
+                    "runtime": {"id": "chrome", "owner_tool": {"name": "Chrome"}},
+                    "evidence": {"owner": "Chrome", "content_profile": "缓存"},
+                },
+            ],
+            "red": [],
+        }
+        groups = build_owner_groups(analysis)
+        by_id = {group["id"]: group for group in groups}
+        self.assertEqual(by_id["path-hint:cloudstorage"]["size_bytes"], 100)
+        self.assertEqual(by_id["path-hint:.cargo"]["size_bytes"], 200)
+        self.assertEqual(by_id["tool:chrome"]["size_bytes"], 300)
+        self.assertNotIn("bundle:google", by_id)
+
     def test_unknown_platform_is_rejected_instead_of_assumed_macos(self) -> None:
         with self.assertRaises(ContractError):
             platform_from_scan({"system": {"os": "Linux"}})

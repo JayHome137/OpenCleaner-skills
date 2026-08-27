@@ -294,21 +294,20 @@ def build_owner_groups(analysis: Mapping[str, Any]) -> list[dict[str, Any]]:
             ownership = item.get("ownership") or {}
             runtime = item.get("runtime") or {}
             evidence = item.get("evidence") or {}
-            if ownership.get("bundle_id"):
-                key = f"bundle:{ownership['bundle_id']}"
-                owner = ownership.get("display_name") or ownership["bundle_id"]
-                source = "Bundle ID"
-            elif runtime.get("id"):
+            if runtime.get("id"):
                 key = f"tool:{runtime['id']}"
                 owner = (runtime.get("owner_tool") or {}).get("name") or runtime["id"]
                 source = "所有者工具"
+            elif ownership.get("bundle_id") and ownership.get("app_paths"):
+                key = f"bundle:{ownership['bundle_id']}"
+                owner = ownership.get("display_name") or ownership["bundle_id"]
+                source = "Bundle ID"
             else:
-                category = evidence.get("content_profile") or (
+                owner = evidence.get("owner") or item.get("name") or (
                     "确定性可恢复目标" if tier == "green" else "未识别内容"
                 )
-                key = f"category:{category}"
-                owner = evidence.get("owner") or category
-                source = "内容类别"
+                key = f"path-hint:{str(owner).casefold()}"
+                source = "路径提示"
             group = groups.setdefault(
                 str(key),
                 {

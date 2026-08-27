@@ -61,6 +61,13 @@ class ReportTests(unittest.TestCase):
         self.assertIn('class="action-button secondary section-toggle section-collapse"', template)
         self.assertIn('class="disposal-verdict ${h(verdict.tone)}"', template)
         self.assertIn('class="finding-status ${h(verdict.tone)}"', template)
+        self.assertIn('class="finding-path-preview"', template)
+        self.assertIn("绿色 · 可删除候选", template)
+        self.assertIn("橙色 · 人工决定", template)
+        self.assertIn("红色 · 不能直接删除", template)
+        self.assertIn("静态只读副本", template)
+        self.assertIn('class="action-button ${h(mode)}"', template)
+        self.assertIn('if (SESSION) return `<section class="interactive-details"', template)
         self.assertIn('detail("归属应用 / 工具"', template)
         self.assertIn('detail("主要作用"', template)
         self.assertIn('detail("判断依据"', template)
@@ -73,10 +80,11 @@ class ReportTests(unittest.TestCase):
         calls = [
             ".innerHTML = decisionSection()",
             "+ sessionSection()",
+            "+ interactiveDetails",
             "+ overview(REPORT.system || {}, summary)",
             "+ topFive(REPORT.top5)",
             '+ listBlock("执行建议"',
-            "+ fullDetails()",
+            "+ staticDetails",
             '+ listBlock("长期优化建议"',
         ]
         positions = [mount.find(value) for value in calls]

@@ -170,7 +170,31 @@ def _actionable_buckets(actions: Any) -> dict[str, dict[str, int]]:
     return buckets
 
 
-def _blocked_bucket(rejected: Any) -> dict[str, Any]:
+BLOCKED_REASON_LABELS = {
+    "open_out_of_scope": "路径超出受控打开范围",
+    "owner_active": "所有者工具仍在运行",
+    "runtime_unknown": "无法确认所有者工具运行状态",
+    "open_files": "目标或其后代仍有打开文件",
+    "open_files_unknown": "无法确认目标是否有打开文件",
+}
+
+
+def blocked_bucket(actions: Any, rejected: Any) -> dict[str, Any]:
+    """Summarise targets that have no authorized action at all.
+
+    A target may legitimately have an authorized reviewed-trash action while
+    its optional open action is out of scope. Keep that action-level rejection
+    in ``rejected``, but do not misreport the whole target as blocked.
+    """
+    actionable_paths: set[str] = set()
+    if isinstance(actions, list):
+        for item in actions:
+            if not isinstance(item, dict):
+                continue
+            for key in ("path", "canonical_path"):
+                value = item.get(key)
+                if isinstance(value, str) and value:
+                    actionable_paths.add(value)
     reasons: dict[str, dict[str, Any]] = {}
     count = 0
     size_bytes = 0
@@ -178,13 +202,22 @@ def _blocked_bucket(rejected: Any) -> dict[str, Any]:
         for item in rejected:
             if not isinstance(item, dict):
                 continue
+            if str(item.get("path") or "") in actionable_paths:
+                continue
             count += 1
             size = _non_negative_int(item.get("size_estimate_bytes", 0))
             size_bytes += size
             code = str(item.get("code") or "unknown")
             reason = reasons.setdefault(
                 code,
-                {"code": code, "message": str(item.get("message") or "已阻止"), "count": 0, "size_bytes": 0},
+                {
+                    "code": code,
+                    "message": BLOCKED_REASON_LABELS.get(
+                        code, str(item.get("message") or "已阻止")
+                    ),
+                    "count": 0,
+                    "size_bytes": 0,
+                },
             )
             reason["count"] += 1
             reason["size_bytes"] += size
@@ -301,7 +334,7 @@ def _migrate_action_plan(data: dict[str, Any]) -> None:
             {
                 "discovery": {tier: {"count": 0, "size_bytes": 0} for tier in ("green", "yellow", "red")},
                 "actionable": _actionable_buckets(actions),
-                "blocked": _blocked_bucket(rejected),
+                "blocked": blocked_bucket(actions, rejected),
             },
         )
     elif version != ACTION_PLAN_SCHEMA_VERSION:
@@ -795,7 +828,7 @@ def validate_action_plan(data: dict[str, Any]) -> dict[str, Any]:
     expected_actionable = _actionable_buckets(data["actions"])
     if decision["actionable"] != expected_actionable:
         raise ContractError("decision.actionable 与 actions 不一致")
-    expected_blocked = _blocked_bucket(data["rejected"])
+    expected_blocked = blocked_bucket(data["actions"], data["rejected"])
     if decision["blocked"] != expected_blocked:
         raise ContractError("decision.blocked 与 rejected 不一致")
     return data

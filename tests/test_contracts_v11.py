@@ -9,7 +9,13 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "open-cleaner" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-from contracts import ContractError, validate_action_plan, validate_analysis, validate_scan_result  # noqa: E402
+from contracts import (  # noqa: E402
+    ContractError,
+    blocked_bucket,
+    validate_action_plan,
+    validate_analysis,
+    validate_scan_result,
+)
 
 
 def legacy_scan() -> dict:
@@ -90,6 +96,27 @@ def action_plan() -> dict:
 
 
 class ContractV11Tests(unittest.TestCase):
+    def test_blocked_bucket_is_target_level_not_rejected_action_level(self) -> None:
+        actions = [{"path": "/tmp/review", "canonical_path": "/tmp/review"}]
+        rejected = [
+            {
+                "path": "/tmp/review",
+                "code": "open_out_of_scope",
+                "message": "打开路径超出允许范围：/tmp/review",
+                "size_estimate_bytes": 10,
+            },
+            {
+                "path": "/Library/system-only",
+                "code": "open_out_of_scope",
+                "message": "打开路径超出允许范围：/Library/system-only",
+                "size_estimate_bytes": 20,
+            },
+        ]
+        bucket = blocked_bucket(actions, rejected)
+        self.assertEqual(bucket["count"], 1)
+        self.assertEqual(bucket["size_bytes"], 20)
+        self.assertEqual(bucket["reasons"][0]["message"], "路径超出受控打开范围")
+
     def test_legacy_scan_is_migrated_with_non_published_cache(self) -> None:
         value = legacy_scan()
         self.assertIs(validate_scan_result(value), value)

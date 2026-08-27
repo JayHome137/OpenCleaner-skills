@@ -14,7 +14,14 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "open-cleaner" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-from policy import PolicyError, SafetyPolicy, build_action_plan, ensure_plan_fresh, parse_time
+from policy import (
+    PolicyError,
+    SafetyPolicy,
+    build_action_plan,
+    build_decision,
+    ensure_plan_fresh,
+    parse_time,
+)
 from runtime import RuntimeInspector
 from rules import RuleCatalog
 
@@ -131,6 +138,43 @@ class PolicyTests(unittest.TestCase):
         action = self.policy.authorize(str(target), "trash", "green")
         self.assertEqual(action["rule_id"], "test.safe-entry")
         self.assertEqual(action["mode"], "trash")
+
+    def test_blocked_decision_excludes_target_with_an_authorized_action(self) -> None:
+        reviewed = str(self.home / "Downloads" / "archive.zip")
+        system_only = "/Library/Developer/CoreSimulator/Caches"
+        decision = build_decision(
+            analysis_for(self.home),
+            actions=[
+                {
+                    "mode": "reviewed_trash",
+                    "path": reviewed,
+                    "canonical_path": reviewed,
+                    "size_estimate_bytes": 2048,
+                }
+            ],
+            rejected=[
+                {
+                    "mode": "open",
+                    "path": reviewed,
+                    "code": "open_out_of_scope",
+                    "message": f"打开路径超出允许范围：{reviewed}",
+                    "size_estimate_bytes": 2048,
+                },
+                {
+                    "mode": "open",
+                    "path": system_only,
+                    "code": "open_out_of_scope",
+                    "message": f"打开路径超出允许范围：{system_only}",
+                    "size_estimate_bytes": 4096,
+                },
+            ],
+        )
+        self.assertEqual(decision["blocked"]["count"], 1)
+        self.assertEqual(decision["blocked"]["size_bytes"], 4096)
+        self.assertEqual(
+            decision["blocked"]["reasons"][0]["message"],
+            "路径超出受控打开范围",
+        )
 
     def test_recent_project_tool_outputs_are_not_authorized_as_green(self) -> None:
         cases = (

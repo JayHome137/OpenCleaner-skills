@@ -54,7 +54,7 @@ def summarize(analysis: dict, plan: dict) -> str:
             f"{item['message']} {item['count']} 项" for item in reasons[:3]
         )
         lines.append(
-            f"当前阻止：{blocked['count']} 项，估算 {size_label(blocked['size_bytes'])}。{reason_text}"
+            f"完全不可行动：{blocked['count']} 项，估算 {size_label(blocked['size_bytes'])}。{reason_text}"
         )
     if groups:
         lines.append(

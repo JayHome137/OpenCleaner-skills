@@ -21,7 +21,8 @@ def main() -> None:
         raise SystemExit(1) from exc
     print(json.dumps(plan, ensure_ascii=False, indent=2))
     print(
-        f"DRY RUN：授权候选 {len(plan['actions'])} 项，拒绝 {len(plan['rejected'])} 项；"
+        f"DRY RUN：授权动作 {len(plan['actions'])} 项，动作级拒绝 {len(plan['rejected'])} 项，"
+        f"完全不可行动 {plan['decision']['blocked']['count']} 项；"
         "该输出不能直接执行。",
         file=sys.stderr,
     )

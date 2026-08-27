@@ -103,6 +103,7 @@ def main() -> None:
         print(f"报告生成失败：{exc}", file=sys.stderr)
         raise SystemExit(1) from exc
     print(f"报告已生成：{destination}")
+    print("提示：这是静态只读副本，不显示删除按钮；逐项处理请使用受控报告服务。")
     print(f"打开：open '{destination}'")
 
 

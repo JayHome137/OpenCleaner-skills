@@ -210,8 +210,10 @@
     text-align: left;
   }
   .finding-toggle:hover { background: #fafbfc; }
-  .finding-primary { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 6px 9px; }
+  .finding-primary { display: grid; min-width: 0; gap: 3px; }
+  .finding-title-row { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 6px 9px; }
   .finding-name { min-width: 0; overflow-wrap: anywhere; font-size: 15px; font-weight: 700; }
+  .finding-path-preview { min-width: 0; color: var(--muted); font: 11px/1.45 ui-monospace, "SFMono-Regular", Consolas, monospace; overflow-wrap: anywhere; }
   .finding-status {
     display: inline-flex;
     align-items: center;
@@ -270,7 +272,8 @@
 
   .action-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
   .action-button { min-height: 34px; padding: 6px 12px; border: 1px solid transparent; border-radius: 6px; cursor: pointer; font-weight: 650; }
-  .action-button.trash { background: var(--blue-soft); color: var(--blue); }
+  .action-button.trash { border-color: #b9dfc5; background: var(--green-soft); color: var(--green); }
+  .action-button.reviewed_trash { border-color: #e5b954; background: var(--amber-soft); color: var(--amber); }
   .action-button.open { background: #eef0f3; color: var(--text); }
   .action-button.primary { background: var(--blue); color: #fff; }
   .action-button.secondary { border-color: var(--border); background: #fff; color: var(--text); }
@@ -348,7 +351,7 @@
   .batch-progress.error { color: var(--red); }
   .review-ack { display: none; align-items: flex-start; gap: 9px; margin-top: 14px; padding: 10px; border: 1px solid #e5b954; border-radius: 6px; background: var(--yellow-soft); }
   .review-ack.visible { display: flex; }
-  .review-ack input { width: 17px; height: 17px; margin: 2px 0 0; accent-color: var(--yellow); }
+  .review-ack input { width: 17px; height: 17px; margin: 2px 0 0; accent-color: var(--amber); }
   footer { margin-top: 36px; color: var(--muted); text-align: center; font-size: 12px; }
 
   @media (max-width: 640px) {
@@ -449,15 +452,19 @@ function decisionSection() {
     `<div class="decision-row"><span>${h(item.message || item.code)} · ${h(item.count)} 项</span><b>${h(bytesPlain(item.size_bytes))}</b></div>`
   ).join("") || `<div class="action-help">当前没有策略阻止项</div>`;
   return `<section class="block"><h2 class="block-title">当前决策</h2><div class="surface decision-grid">
-    <div class="decision-column"><h3>扫描发现</h3>${decisionRow("规则候选", discovery.green)}${decisionRow("需要解释", discovery.yellow)}${decisionRow("只展示 / 保留", discovery.red)}</div>
+    <div class="decision-column"><h3>安全等级</h3>${decisionRow("绿色 · 可删除候选", discovery.green)}${decisionRow("橙色 · 人工决定", discovery.yellow)}${decisionRow("红色 · 不能直接删除", discovery.red)}</div>
     <div class="decision-column"><h3>现在可行动</h3>${decisionRow("安全移入废纸篓", actionable.trash)}${decisionRow("逐项人工复核", actionable.reviewed_trash)}${decisionRow("只打开查看", actionable.open)}</div>
-    <div class="decision-column"><h3>当前被阻止 · ${h(blocked.count || 0)} 项 · ${h(bytesPlain(blocked.size_bytes))}</h3>${reasons}</div>
+    <div class="decision-column"><h3>完全不可行动 · ${h(blocked.count || 0)} 项 · ${h(bytesPlain(blocked.size_bytes))}</h3>${reasons}</div>
   </div></section>`;
+}
+
+function tierLabel(tier) {
+  return {green: "绿色", yellow: "橙色", red: "红色"}[tier] || tier || "未知";
 }
 
 function ownerGroupsSection(groups) {
   if (!groups || !groups.length) return "";
-  const rows = groups.slice(0, 8).map(group => `<div class="owner-row"><div class="owner-main"><b>${h(group.owner)}</b><span>${h(group.source)} · ${h(group.item_count)} 项 · ${h(group.highest_tier)}</span></div><div class="owner-size">${h(compactSize(group.size))}</div><div class="owner-policy">${h(group.summary)}</div></div>`).join("");
+  const rows = groups.slice(0, 8).map(group => `<div class="owner-row"><div class="owner-main"><b>${h(group.owner)}</b><span>${h(group.source)} · ${h(group.item_count)} 项 · ${h(tierLabel(group.highest_tier))}</span></div><div class="owner-size">${h(compactSize(group.size))}</div><div class="owner-policy">${h(group.summary)}</div></div>`).join("");
   return `<section class="block"><h2 class="block-title">优先查看的所有者 <span class="block-count">显示前 ${Math.min(8, groups.length)} / ${groups.length} 组</span></h2><div class="surface owner-list">${rows}</div></section>`;
 }
 
@@ -535,7 +542,7 @@ function selectedActions() {
 }
 
 function sessionSection() {
-  if (!SESSION) return "";
+  if (!SESSION) return `<section class="block surface session-bar"><div class="session-copy"><div class="session-title">静态只读副本</div><div class="session-detail">这里保留完整路径和判断依据，但不会显示删除按钮。需要逐项操作时，请通过 OpenCleaner 的受控交互报告进入；静态文件不能获得操作权限。</div></div></section>`;
   const trashCount = (SESSION.actions || []).filter(action => action.mode === "trash").length;
   const reviewedCount = (SESSION.actions || []).filter(action => action.mode === "reviewed_trash").length;
   const expires = SESSION.expires_at ? new Date(SESSION.expires_at).toLocaleString() : "未知";
@@ -646,9 +653,9 @@ function segments(system, summary) {
   const used = sizeInGb(system.disk_used);
   const stats = summary && summary.tier_stats || {};
   const values = [
-    ["green", sizeInGb(stats.green), "规则候选"],
-    ["amber", sizeInGb(stats.yellow), "需要解释"],
-    ["red", sizeInGb(stats.red), "只展示 / 保留"]
+    ["green", sizeInGb(stats.green), "绿色 · 可删除候选"],
+    ["amber", sizeInGb(stats.yellow), "橙色 · 人工决定"],
+    ["red", sizeInGb(stats.red), "红色 · 不能直接删除"]
   ];
   const known = values.reduce((sum, item) => sum + item[1], 0);
   values.push(["blue", Math.max(0, used - known), "系统及其他"]);
@@ -667,7 +674,7 @@ function overview(system, summary) {
     return `<div class="disk-row"><span class="disk-name">${h(disk.name)}</span><div class="disk-track"><span style="width:${percent.toFixed(1)}%"></span></div><span class="disk-value">${h(disk.used)} / ${h(disk.total)}</span></div>`;
   }).join("");
   const coverageText = coverage.requested_roots == null ? "未提供" : `${h(coverage.completed_roots)} / ${h(coverage.requested_roots)} 个根目录`;
-  const legend = [["green", "规则候选", stats.green], ["yellow", "需要解释", stats.yellow], ["red", "只展示 / 保留", stats.red]]
+  const legend = [["green", "绿色 · 可删除候选", stats.green], ["yellow", "橙色 · 人工决定", stats.yellow], ["red", "红色 · 不能直接删除", stats.red]]
     .map(([tone, label, value]) => `<span class="legend-chip"><span class="level-dot ${tone}"></span>${label} <b>${h(compactSize(value || "约 0 GB"))}</b></span>`).join("");
   return `<section class="block surface overview">
     <div class="metric-grid">
@@ -905,11 +912,14 @@ function detail(label, content) {
 function finding(item, tier) {
   const size = item.size_estimate || item.size || "";
   const verdict = disposition(item, tier);
-  return `<article class="finding ${h(tier)}"><button class="finding-toggle" type="button" aria-expanded="false"><span class="level-dot ${h(tier)}"></span><span class="finding-primary"><span class="finding-name">${h(item.name)}</span><span class="finding-status ${h(verdict.tone)}">${h(verdict.short)}</span></span><span class="finding-size">${h(compactSize(size))}</span><span class="finding-arrow">›</span></button><div class="finding-body"><div class="path-line">${h(item.path)}</div>${findingBody(item, tier)}</div></article>`;
+  const mutation = tier === "green" ? mutationDecision(item, "trash")
+    : tier === "yellow" ? mutationDecision(item, "reviewed_trash") : {};
+  const expanded = Boolean(SESSION && mutation.allowed);
+  return `<article class="finding ${h(tier)}${expanded ? " expanded" : ""}"><button class="finding-toggle" type="button" aria-expanded="${expanded ? "true" : "false"}"><span class="level-dot ${h(tier)}"></span><span class="finding-primary"><span class="finding-title-row"><span class="finding-name">${h(item.name)}</span><span class="finding-status ${h(verdict.tone)}">${h(verdict.short)}</span></span><span class="finding-path-preview">${h(item.path)}</span></span><span class="finding-size">${h(compactSize(size))}</span><span class="finding-arrow">›</span></button><div class="finding-body"><div class="path-line">完整路径：${h(item.path)}</div>${findingBody(item, tier)}</div></article>`;
 }
 
 function findingsSection(title, items, tier) {
-  if (!items || !items.length) return "";
+  items = items || [];
   let selection = "";
   if (tier === "green" && SESSION) {
     const ids = [...new Set(items.flatMap(item => idsFor(item.trash_paths || [], "trash")))];
@@ -918,16 +928,17 @@ function findingsSection(title, items, tier) {
     const ids = [...new Set(items.flatMap(item => idsFor(item.reviewed_trash_paths || [], "reviewed_trash")))];
     if (ids.length) selection = `<button class="action-button secondary select-all" type="button" data-action-ids="${h(ids.join(","))}">选择可复核项</button>`;
   }
-  const tools = `<span class="block-tools"><button class="action-button secondary section-toggle section-expand" type="button" data-expanded="true">展开全部</button><button class="action-button secondary section-toggle section-collapse" type="button" data-expanded="false" disabled>收起全部</button>${selection}</span>`;
-  return `<section class="block findings-section" data-tier="${h(tier)}"><h2 class="block-title">${h(title)} <span class="block-count">${items.length} 项</span>${tools}</h2>${items.map(item => finding(item, tier)).join("")}</section>`;
+  const tools = items.length ? `<span class="block-tools"><button class="action-button secondary section-toggle section-expand" type="button" data-expanded="true">展开全部</button><button class="action-button secondary section-toggle section-collapse" type="button" data-expanded="false" disabled>收起全部</button>${selection}</span>` : "";
+  const body = items.length ? items.map(item => finding(item, tier)).join("") : `<div class="surface guidance">本次没有${h(tierLabel(tier))}项目。</div>`;
+  return `<section class="block findings-section" data-tier="${h(tier)}"><h2 class="block-title">${h(title)} <span class="block-count">${items.length} 项</span>${tools}</h2>${body}</section>`;
 }
 
 function fullDetails() {
-  const content = findingsSection("可安全处理候选（确定性、可恢复）", REPORT.green, "green")
-    + findingsSection("需要解释或人工复核", REPORT.yellow, "yellow")
-    + findingsSection("只展示 / 建议保留", REPORT.red, "red");
-  if (!content) return "";
+  const content = findingsSection("绿色 · 可移入废纸篓（确定性、可恢复）", REPORT.green, "green")
+    + findingsSection("橙色 · 由你逐项决定（仅授权目标显示按钮）", REPORT.yellow, "yellow")
+    + findingsSection("红色 · 不能直接删除（仅定位和说明）", REPORT.red, "red");
   const count = (REPORT.green || []).length + (REPORT.yellow || []).length + (REPORT.red || []).length;
+  if (SESSION) return `<section class="interactive-details"><h2 class="block-title">按安全等级处理 <span class="block-count">${h(count)} 项</span></h2>${content}</section>`;
   return `<details class="full-details"><summary>完整明细 · ${h(count)} 项</summary><div class="full-details-content">${content}</div></details>`;
 }
 
@@ -1191,8 +1202,11 @@ function mount() {
   const summary = REPORT.summary || {};
   // Keep the three-way decision visible before the longer evidence sections.
   // It is the smallest useful answer for users who will not drill into HTML.
+  const interactiveDetails = SESSION ? fullDetails() : "";
+  const staticDetails = SESSION ? "" : fullDetails();
   document.getElementById("report-content").innerHTML = decisionSection()
     + sessionSection()
+    + interactiveDetails
     + overview(REPORT.system || {}, summary)
     + ownerGroupsSection(REPORT.owner_groups || [])
     + coverageAndApfsSection()
@@ -1200,7 +1214,7 @@ function mount() {
     + topFive(REPORT.top5)
     + listBlock("执行建议", Array.isArray(summary.priority) ? summary.priority : [], summary.overview)
     + installerSection(REPORT.installer_packages || [])
-    + fullDetails()
+    + staticDetails
     + permissions(REPORT.denied)
     + historicalSection()
     + historySection()
