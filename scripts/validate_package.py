@@ -119,7 +119,7 @@ def check_openai_yaml() -> None:
 
 def check_licensing() -> None:
     version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
-    if version != "1.2.0":
+    if version != "1.2.1":
         fail(f"unexpected project version: {version}")
 
     license_text = (ROOT / "LICENSE").read_text(encoding="utf-8")

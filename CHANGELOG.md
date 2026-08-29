@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.1 - 2026-08-30
 
 - Added a sanitized interactive report preview and a public-project guidance
   section to the README files.

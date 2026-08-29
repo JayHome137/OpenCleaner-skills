@@ -239,7 +239,7 @@ shasum -a 256 --check SHA256SUMS
 安装 GitHub CLI 后可以继续验证制品是否由本仓库的发布工作流生成：
 
 ```bash
-gh attestation verify OpenCleaner-1.2.0.tar.gz \
+gh attestation verify OpenCleaner-1.2.1.tar.gz \
   --repo JayHome137/OpenCleaner-skills
 ```
 

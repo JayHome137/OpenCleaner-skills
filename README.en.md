@@ -78,6 +78,6 @@ Official releases include `SHA256SUMS` and GitHub Artifact Attestations:
 
 ```bash
 shasum -a 256 --check SHA256SUMS
-gh attestation verify OpenCleaner-1.2.0.tar.gz \
+gh attestation verify OpenCleaner-1.2.1.tar.gz \
   --repo JayHome137/OpenCleaner-skills
 ```
