@@ -29,6 +29,11 @@ race an external Finder/Trash implementation after the atomic staging rename;
 the staged object is never permanently deleted by OpenCleaner and failures are
 restored only without overwriting a newly-created path.
 
+Review tokens are short-lived and garbage-collected with a bounded in-memory
+store. The operation log is private, rotates at a fixed size, and the local
+HTTP surface has a small per-client rate limit; these controls reduce accidental
+resource exhaustion but are not a substitute for OS-level authentication.
+
 Out of scope: remote hosts, Windows/Linux operation, administrator/root
 actions, and data recovered from a user's Trash.
 

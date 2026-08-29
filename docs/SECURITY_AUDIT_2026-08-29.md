@@ -18,14 +18,16 @@
 | Identity check and external Trash call had a path-based TOCTOU window | `open-cleaner/scripts/file_ops.py` | Mitigated. The target is atomically renamed into a private sibling staging directory, its identity is checked again, and only the staged path is handed to Finder/Trash. Failure restores only without overwriting a recreated path. |
 | Local token is readable by another process running as the same user | `open-cleaner/scripts/server.py` | Accepted residual risk. The service is loopback-only and token-protected against accidental cross-origin requests, but HTTP cannot provide an OS identity boundary. The threat model is documented in `SECURITY.md`; a future Unix-socket/OS-auth design is a separate change. |
 
-## Remaining P2 work
+## P2 follow-up status
 
-- Expire and garbage-collect old review-token records proactively.
-- Add operation-log rotation and a bounded request/rate policy.
-- Run a maintained SAST/dependency scanner in CI when the project gains
+- Review-token records now expire and are garbage-collected during review and
+  action requests; a bounded 256-record cap prevents unbounded growth.
+- Operation logs rotate at 2 MiB and retain a recent tail; the loopback HTTP
+  surface is limited to 60 requests per client per 10 seconds.
+- A maintained SAST/dependency scanner can be added when the project gains
   third-party dependencies; the current guard is intentionally stdlib-only.
-- Re-run remote CI after the private branch is pushed; this worktree has not
-  been published or released.
+- Remote CI should be re-run after each future private push; this audit does
+  not authorize public release.
 
 ## Release boundary
 

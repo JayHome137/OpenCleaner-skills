@@ -151,6 +151,26 @@ class ServerContextTests(unittest.TestCase):
             token="test-token",
         )
 
+    def test_expired_review_tokens_are_purged(self) -> None:
+        context = self.make_review_context([], [])
+        context.review_tokens["expired"] = {
+            "expires_at": time.monotonic() - 1,
+            "used": False,
+        }
+        context.review_tokens["live"] = {
+            "expires_at": time.monotonic() + 60,
+            "used": False,
+        }
+        context.purge_review_tokens()
+        self.assertNotIn("expired", context.review_tokens)
+        self.assertIn("live", context.review_tokens)
+
+    def test_loopback_request_rate_limit_is_bounded(self) -> None:
+        context = self.make_review_context([], [])
+        for _ in range(60):
+            self.assertTrue(context.allow_request("127.0.0.1"))
+        self.assertFalse(context.allow_request("127.0.0.1"))
+
     def test_render_exposes_action_ids_but_no_path_submission_contract(self) -> None:
         target = self.make_cache("one")
         context = self.make_context([target], [])

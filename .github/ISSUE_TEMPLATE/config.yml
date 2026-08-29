@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: mailto:GitHub repository maintainers
+    about: Please report security issues privately as described in SECURITY.md.
+  - name: Documentation and usage questions
+    url: https://github.com/JayHome137/OpenCleaner-skills/discussions
+    about: Use Discussions for questions that are not bug reports or feature requests.

@@ -1,12 +1,22 @@
-# OpenCleaner
+<div align="center">
 
-English quick start: [README.en.md](README.en.md).
+# 🧹 OpenCleaner
 
-面向 Codex 和其他 AI Agent 的 macOS 存储分析 Skill：只读扫描磁盘占用，生成中文分级报告，并通过确定性规则提供受控、可恢复的文件处置。
+**面向 Codex 和其他 AI Agent 的 macOS 存储分析与安全清理 Skill。**
 
+![Platform](https://img.shields.io/badge/platform-macOS-000000?logo=apple&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white)
+![Type](https://img.shields.io/badge/type-Agent%20Skill-7C3AED)
 [![macOS 验证](https://github.com/JayHome137/OpenCleaner-skills/actions/workflows/macos-validation.yml/badge.svg)](https://github.com/JayHome137/OpenCleaner-skills/actions/workflows/macos-validation.yml)
 [![许可证](https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue.svg)](LICENSE)
 [![安全策略](https://img.shields.io/badge/security-policy-blue.svg)](SECURITY.md)
+
+English quick start: [README.en.md](README.en.md)
+
+</div>
+
+> [!IMPORTANT]
+> 当前版本只支持 **macOS + Python 3.9 或更高版本**。扫描默认只读；处置只允许进入系统废纸篓，不提供永久删除、管理员权限或无人值守清理。
 
 ## 核心能力
 
@@ -19,6 +29,7 @@ English quick start: [README.en.md](README.en.md).
 - **可重复使用**：只读容量测量支持短 TTL、指纹失效的私有缓存；扫描支持 stderr 进度，取消不会发布半成品。
 - **项目产物阶段**：按需发现 allowlist 内的构建/测试生成目录；只有项目清单、Git 状态、静置期和打开文件检查全部通过才进入黄灯复核。
 - **操作可审计**：记录操作结果、失败原因、目标复核和磁盘可用空间变化。
+- **本地资源有界**：复核令牌会过期回收，操作日志超过 2 MiB 自动保留近期记录，服务端对单客户端请求做速率限制。
 
 OpenCleaner 不提供永久删除、系统目录自动清理、管理员权限操作、完整应用卸载、系统优化或实时硬件监控。
 
@@ -27,6 +38,16 @@ OpenCleaner 不提供永久删除、系统目录自动清理、管理员权限�
 ![OpenCleaner 功能矩阵](docs/assets/feature-matrix.svg)
 
 矩阵中的“完整”表示该能力已经进入当前 macOS 工作流并通过对应验证；它不代表绕过确认或扩大处置权限。平台范围和验证边界见下文。
+
+## 风险颜色
+
+| 颜色 | 用户可以做什么 | 典型边界 |
+| --- | --- | --- |
+| 🟢 绿色 | 按确定性规则移入废纸篓 | 可恢复、规则明确、非所有者工具内容 |
+| 🟠 橙色 | 查看说明后逐项人工确认 | 下载/临时目录直接子项或满足阶段门的项目产物 |
+| 🔴 红色 | 只查看和打开说明 | 敏感数据、系统路径、所有者工具内容或状态未知 |
+
+每个动作都显示原因、文件路径、恢复方式和排除范围；红色项目不会出现删除入口。
 
 ## 快速开始
 
@@ -136,6 +157,20 @@ python3 scripts/build_report.py /tmp/storage-analysis.json ~/Desktop/storage-rep
 ```
 
 数据契约位于 [`open-cleaner/schemas/`](open-cleaner/schemas/)，安全规则位于 [`open-cleaner/rules/`](open-cleaner/rules/)。扫描、策略、报告和执行模块保持单向职责，报告不能绕过服务端授权。
+
+## 仓库结构
+
+```text
+open-cleaner/SKILL.md             Skill 触发条件和安全边界
+open-cleaner/scripts/             扫描、分类、报告、策略和本地服务
+open-cleaner/rules/               绿灯确定性规则与排除范围
+open-cleaner/schemas/             scan / analysis / action-plan 契约
+open-cleaner/assets/              HTML 报告模板
+tests/                            单元、安全回归和 macOS fixture smoke
+docs/                             验收、审计、来源和路线图
+```
+
+项目只依赖 Python 标准库和 macOS 系统文件管理能力；没有运行时第三方依赖清单。
 
 ## 平台支持
 

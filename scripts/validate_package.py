@@ -33,6 +33,7 @@ REQUIRED_FILES = [
     ROOT / "scripts" / "security_scan.py",
     ROOT / ".github" / "ISSUE_TEMPLATE" / "bug_report.yml",
     ROOT / ".github" / "ISSUE_TEMPLATE" / "feature_request.yml",
+    ROOT / ".github" / "ISSUE_TEMPLATE" / "config.yml",
     ROOT / ".github" / "PULL_REQUEST_TEMPLATE.md",
     SKILL_DIR / "SKILL.md",
     SKILL_DIR / "agents" / "openai.yaml",

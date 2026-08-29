@@ -17,6 +17,7 @@ sys.path.insert(0, str(SCRIPTS))
 from file_ops import (
     FileOperationError,
     FileOperator,
+    MAX_OPERATION_LOG_BYTES,
     OperationLog,
     move_to_trash,
     open_in_file_manager,
@@ -172,6 +173,14 @@ class FileOperationTests(unittest.TestCase):
         with self.assertRaises(OSError):
             log.append({"status": "completed"})
         self.assertEqual(destination.read_text(encoding="utf-8"), "original")
+
+    def test_operation_log_rotates_before_append(self) -> None:
+        log = OperationLog(self.root / "bounded-state")
+        log.state_dir.mkdir(mode=0o700)
+        log.path.write_bytes((b'{"status":"completed"}\n' * (MAX_OPERATION_LOG_BYTES // 20 + 1)))
+        log.append({"status": "completed", "path": "latest"})
+        self.assertLessEqual(log.path.stat().st_size, MAX_OPERATION_LOG_BYTES)
+        self.assertIn('"path": "latest"', log.path.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

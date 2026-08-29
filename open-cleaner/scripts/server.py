@@ -27,6 +27,9 @@ TEMPLATE = HERE.parent / "assets" / "report_template.html"
 MAX_REQUEST_BYTES = 64 * 1024
 MAX_ACTIONS_PER_REQUEST = 50
 REVIEW_TOKEN_TTL_SECONDS = 120
+MAX_REVIEW_TOKENS = 256
+REQUEST_RATE_WINDOW_SECONDS = 10.0
+REQUEST_RATE_LIMIT = 60
 
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
@@ -80,8 +83,34 @@ class ServerContext:
         self.actions = {action["action_id"]: action for action in plan["actions"]}
         self.completed: set[str] = set()
         self.review_tokens: dict[str, dict[str, Any]] = {}
+        self.request_times: dict[str, list[float]] = {}
         self.last_comparison: Optional[dict[str, Any]] = None
         self.lock = threading.Lock()
+
+    def purge_review_tokens(self, preserve: Optional[str] = None) -> None:
+        """Drop expired review records so a long-lived page cannot grow state."""
+        now = time.monotonic()
+        expired = [
+            token for token, record in self.review_tokens.items()
+            if token != preserve
+            if float(record.get("expires_at", 0)) <= now
+        ]
+        for token in expired:
+            self.review_tokens.pop(token, None)
+
+    def allow_request(self, client: str) -> bool:
+        """Apply a small per-client limit to the loopback HTTP surface."""
+        now = time.monotonic()
+        recent = [
+            value for value in self.request_times.get(client, [])
+            if value > now - REQUEST_RATE_WINDOW_SECONDS
+        ]
+        if len(recent) >= REQUEST_RATE_LIMIT:
+            self.request_times[client] = recent
+            return False
+        recent.append(now)
+        self.request_times[client] = recent
+        return True
 
     def public_config(self) -> dict[str, Any]:
         return {
@@ -238,6 +267,9 @@ class ServerContext:
         return actions
 
     def review(self, action_ids: Sequence[str]) -> dict[str, Any]:
+        self.purge_review_tokens()
+        if len(self.review_tokens) >= MAX_REVIEW_TOKENS:
+            raise PolicyError("review_token_limit", "人工复核令牌数量达到上限，请重新扫描后再试")
         ensure_plan_fresh(self.plan)
         actions = self._resolve_actions(action_ids)
         if any(action["mode"] != "reviewed_trash" for action in actions):
@@ -263,6 +295,7 @@ class ServerContext:
         action_ids: Sequence[str],
         review_token: Optional[str] = None,
     ) -> dict[str, Any]:
+        self.purge_review_tokens(preserve=review_token)
         ensure_plan_fresh(self.plan)
         actions = self._resolve_actions(action_ids)
         reviewed = [action for action in actions if action["mode"] == "reviewed_trash"]
@@ -416,6 +449,13 @@ def make_handler(context: ServerContext) -> type[BaseHTTPRequestHandler]:
             host = (self.headers.get("Host") or "").split(":", 1)[0].lower()
             return host in ("127.0.0.1", "localhost")
 
+        def _rate_allowed(self) -> bool:
+            client = str(self.client_address[0]) if self.client_address else "unknown"
+            if context.allow_request(client):
+                return True
+            self._send(429, {"ok": False, "error": "请求过于频繁，请稍后再试"})
+            return False
+
         def do_GET(self) -> None:
             parsed = urlsplit(self.path)
             if parsed.path not in ("/", "/index.html", "/browse", "/settings"):
@@ -423,6 +463,8 @@ def make_handler(context: ServerContext) -> type[BaseHTTPRequestHandler]:
                 return
             if not self._host_allowed():
                 self._send(403, {"ok": False, "error": "Host 不被允许"})
+                return
+            if not self._rate_allowed():
                 return
             if parsed.path in ("/", "/index.html"):
                 self._send(200, context.render(), "text/html; charset=utf-8")
@@ -448,6 +490,8 @@ def make_handler(context: ServerContext) -> type[BaseHTTPRequestHandler]:
                 return
             if not self._host_allowed():
                 self._send(403, {"ok": False, "error": "Host 不被允许"})
+                return
+            if not self._rate_allowed():
                 return
             if not (self.headers.get("Content-Type") or "").lower().startswith("application/json"):
                 self._send(415, {"ok": False, "error": "Content-Type 必须是 application/json"})

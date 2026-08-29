@@ -9,6 +9,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Union
@@ -25,6 +26,9 @@ from policy import (
 
 class FileOperationError(OSError):
     """Raised when a guarded operation cannot complete."""
+
+
+MAX_OPERATION_LOG_BYTES = 2 * 1024 * 1024
 
 
 def disk_free_bytes(path: str) -> int:
@@ -54,21 +58,64 @@ class OperationLog:
     def __init__(self, state_dir: Optional[Union[str, Path]] = None) -> None:
         self.state_dir = Path(state_dir) if state_dir is not None else default_state_dir()
         self.path = self.state_dir / "operations.jsonl"
+        self._lock = threading.Lock()
+
+    def _rotate_if_needed(self) -> None:
+        try:
+            size = self.path.stat().st_size
+        except FileNotFoundError:
+            return
+        if size <= MAX_OPERATION_LOG_BYTES:
+            return
+        keep_bytes = MAX_OPERATION_LOG_BYTES // 2
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(self.path, flags)
+        try:
+            metadata = os.fstat(descriptor)
+            if not stat.S_ISREG(metadata.st_mode):
+                raise OSError("操作日志不是普通文件")
+            os.lseek(descriptor, max(0, metadata.st_size - keep_bytes), os.SEEK_SET)
+            payload = os.read(descriptor, keep_bytes)
+        finally:
+            os.close(descriptor)
+        # Starting at a newline keeps recent() from seeing a partial JSON
+        # record.  A temporary sibling plus replace avoids truncating the
+        # current log if the process is interrupted.
+        if b"\n" in payload:
+            payload = payload.split(b"\n", 1)[1]
+        temporary = tempfile.NamedTemporaryFile(
+            mode="wb", prefix=".operations-", dir=self.state_dir, delete=False
+        )
+        temporary_path = Path(temporary.name)
+        try:
+            temporary.write(payload)
+            temporary.flush()
+            os.fchmod(temporary.fileno(), 0o600)
+            temporary.close()
+            os.replace(temporary_path, self.path)
+        finally:
+            try:
+                temporary.close()
+            except OSError:
+                pass
+            temporary_path.unlink(missing_ok=True)
 
     def append(self, entry: Mapping[str, Any]) -> None:
-        self.state_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
-        if os.name != "nt":
-            os.chmod(self.state_dir, 0o700)
-        line = json.dumps(dict(entry), ensure_ascii=False, sort_keys=True)
-        if self.path.is_symlink():
-            raise OSError("操作日志不能是符号链接")
-        flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT
-        flags |= getattr(os, "O_NOFOLLOW", 0)
-        descriptor = os.open(self.path, flags, 0o600)
-        if os.name != "nt":
-            os.fchmod(descriptor, 0o600)
-        with os.fdopen(descriptor, "a", encoding="utf-8", newline="\n") as handle:
-            handle.write(line + "\n")
+        with self._lock:
+            self.state_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+            if os.name != "nt":
+                os.chmod(self.state_dir, 0o700)
+            line = json.dumps(dict(entry), ensure_ascii=False, sort_keys=True)
+            if self.path.is_symlink():
+                raise OSError("操作日志不能是符号链接")
+            self._rotate_if_needed()
+            flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT
+            flags |= getattr(os, "O_NOFOLLOW", 0)
+            descriptor = os.open(self.path, flags, 0o600)
+            if os.name != "nt":
+                os.fchmod(descriptor, 0o600)
+            with os.fdopen(descriptor, "a", encoding="utf-8", newline="\n") as handle:
+                handle.write(line + "\n")
 
     def recent(self, limit: int = 20, max_bytes: int = 256 * 1024) -> dict[str, Any]:
         normalized_limit = max(1, min(int(limit), 100))

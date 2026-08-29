@@ -8,6 +8,8 @@
   with non-overwriting recovery on failure.
 - Added security policy, threat-model disclosure, contributor guidance,
   community templates, and a dependency-free CI security tripwire.
+- Added bounded review-token cleanup, 2 MiB operation-log rotation, and a
+  loopback request rate limit.
 
 ## 1.1.0
 
