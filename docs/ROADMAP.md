@@ -13,6 +13,8 @@ evidence so that safety claims do not outrun verification.
   attestation for release archives.
 - Run package validation across macOS 14/Python 3.9 and macOS 15/Python 3.13.
 - Keep an English quick start alongside the Chinese product documentation.
+- Keep the optional local authorization modes in a separate, explicitly
+  documented branch rather than changing the main default.
 
 ## Next community improvements
 

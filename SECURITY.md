@@ -35,6 +35,17 @@ store. The operation log is private, rotates at a fixed size, and the local
 HTTP surface has a small per-client rate limit; these controls reduce accidental
 resource exhaustion but are not a substitute for OS-level authentication.
 
+## Optional authorization branch
+
+The `codex/local-auth-modes` branch is intentionally kept separate from
+`main`. It provides two opt-in variants for users with a different threat
+model: `system-confirm` adds a visible macOS confirmation before each Trash
+batch, while `view-only` removes action IDs and mutation endpoints entirely.
+Neither variant is part of the default Release, and `system-confirm` is only a
+user-presence check. A process with Accessibility or remote-control permission
+may still approve a misleading dialog; a true process-identity boundary would
+require a separately audited native helper and IPC design.
+
 Out of scope: remote hosts, Windows/Linux operation, administrator/root
 actions, and data recovered from a user's Trash.
 

@@ -41,6 +41,25 @@ Green means a deterministic rule may move an item to Trash; yellow requires a
 separate human review; red is display-only. OpenCleaner never permanently
 deletes files and never asks for administrator privileges.
 
+### Optional local authorization modes
+
+The `main` branch uses `token` mode by default. It prevents accidental
+cross-origin requests, but it is not an operating-system process boundary: a
+different process running as the same macOS user may still read the local page
+or token and replay an authorized action.
+
+The experimental [`codex/local-auth-modes`](https://github.com/JayHome137/OpenCleaner-skills/tree/codex/local-auth-modes)
+branch is kept as a separate, non-merged architecture choice:
+
+| Mode | What changes | Intended use |
+| --- | --- | --- |
+| `token` | Page token, plan ID, and action ID checks | Trusted personal device |
+| `system-confirm` | Visible macOS confirmation before each Trash batch | Reduce silent local replay |
+| `view-only` | No action IDs or mutation endpoints | Shared device or evidence review |
+
+The branch is not part of the default Release and does not provide true OS
+process authentication. See its [full threat-boundary notes](https://github.com/JayHome137/OpenCleaner-skills/blob/codex/local-auth-modes/docs/LOCAL_AUTHORIZATION_MODES.md).
+
 See [SECURITY.md](SECURITY.md), [CONTRIBUTING.md](CONTRIBUTING.md), and the
 [Chinese README](README.md) for the full scope and development workflow.
 

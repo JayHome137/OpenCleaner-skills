@@ -118,6 +118,20 @@ python3 scripts/server.py /tmp/storage-analysis.json
 
 本地服务绑定 `127.0.0.1` 的随机端口，并使用随机 token。浏览器只提交 action ID；黄灯复核额外提交服务端签发的一次性令牌，不提交路径或操作类型。
 
+### 本地 HTTP 授权模式（可选分支）
+
+main 默认使用 `token` 模式：它可以阻止跨来源误请求和没有页面令牌的调用，但**不能**把 HTTP 服务变成操作系统级的进程认证。同一位 macOS 用户下的其他进程仍可能读取本地页面或令牌并尝试重放已授权的 action。这个风险已在 [安全策略](SECURITY.md) 中明确记录。
+
+如果你更看重“必须看到系统确认”或“完全只读”，可以选择实验分支 [`codex/local-auth-modes`](https://github.com/JayHome137/OpenCleaner-skills/tree/codex/local-auth-modes)。它是并行架构选择，**不会合并进 main，也不属于正式 Release 的默认能力**：
+
+| 模式 | 增加的保护 | 仍需接受的风险 | 适合场景 |
+| --- | --- | --- | --- |
+| `token`（main 默认） | 页面令牌、计划 ID 和 action ID 校验 | 同用户进程可能读取令牌并重放请求 | 个人可信设备 |
+| `system-confirm`（实验分支） | 每批 Trash 操作前弹出可见的 macOS 确认框 | 具备辅助功能/远程控制权限的程序仍可能代点确认 | 希望防止静默本地重放 |
+| `view-only`（实验分支） | 移除 action ID 和变更接口，只保留报告与浏览 | 报告仍会显示当前用户可见的本地路径 | 共享设备或证据审阅 |
+
+选择实验分支不会自动改变 main，也不会带来真正的进程身份边界；真正的 OS 级隔离仍需要签名原生 helper 和独立 IPC 安全设计。完整说明见[分支文档](https://github.com/JayHome137/OpenCleaner-skills/blob/codex/local-auth-modes/docs/LOCAL_AUTHORIZATION_MODES.md)。
+
 项目开发阶段已经完成测试/构建、源码已有可恢复检查点且相关进程已退出时，可以改用项目阶段分析：
 
 ```bash

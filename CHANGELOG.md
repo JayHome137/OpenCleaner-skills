@@ -6,6 +6,8 @@
   section to the README files.
 - Added extracted-release-archive validation, a macOS/Python verification
   matrix, a tracked-file privacy scan, and a pinned CodeQL workflow.
+- Documented the non-merged local authorization branch and its token,
+  system-confirm, and view-only trade-offs.
 - Updated roadmap, security, contribution, and acceptance documentation for
   the public repository state.
 
