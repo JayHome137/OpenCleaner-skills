@@ -7,8 +7,9 @@ privileges.
 
 ## Reporting a vulnerability
 
-Please do not open a public issue for a security-sensitive report. Contact
-`GitHub repository maintainers` with:
+Please do not open a public issue for a security-sensitive report. Use
+[GitHub private vulnerability reporting](https://github.com/JayHome137/OpenCleaner-skills/security/advisories/new)
+with:
 
 - affected version/commit and macOS version;
 - a minimal reproduction (without personal files, tokens, or private paths);

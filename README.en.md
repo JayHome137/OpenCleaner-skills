@@ -29,3 +29,15 @@ deletes files and never asks for administrator privileges.
 
 See [SECURITY.md](SECURITY.md), [CONTRIBUTING.md](CONTRIBUTING.md), and the
 [Chinese README](README.md) for the full scope and development workflow.
+
+OpenCleaner 1.2.0 and later are licensed under the
+[Apache License 2.0](LICENSE). Third-party notices remain in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+Official releases include `SHA256SUMS` and GitHub Artifact Attestations:
+
+```bash
+shasum -a 256 --check SHA256SUMS
+gh attestation verify OpenCleaner-1.2.0.tar.gz \
+  --repo JayHome137/OpenCleaner-skills
+```

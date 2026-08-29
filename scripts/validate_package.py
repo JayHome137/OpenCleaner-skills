@@ -65,12 +65,12 @@ REQUIRED_FILES = [
     SCRIPTS_DIR / "summarize.py",
     SCRIPTS_DIR / "validate_plan.py",
     ROOT / ".github" / "workflows" / "macos-validation.yml",
+    ROOT / ".github" / "workflows" / "release-assets.yml",
     ROOT / "README.md",
     ROOT / "README.en.md",
     ROOT / "LICENSE",
     ROOT / "NOTICE",
     ROOT / "VERSION",
-    ROOT / "COMMERCIAL_LICENSE.md",
     ROOT / ".gitignore",
     ROOT / "tests" / "windows_smoke.py",
     ROOT / "tests" / "macos_smoke.py",
@@ -116,34 +116,25 @@ def check_openai_yaml() -> None:
 
 def check_licensing() -> None:
     version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
-    if version != "1.1.0":
+    if version != "1.2.0":
         fail(f"unexpected project version: {version}")
 
     license_text = (ROOT / "LICENSE").read_text(encoding="utf-8")
     normalized_license = license_text.replace("\r\n", "\n").replace("\r", "\n").encode("utf-8")
     license_sha256 = hashlib.sha256(normalized_license).hexdigest()
-    expected_sha256 = "ffcca38841adb694b6f380647e15f17c446a4d1656fed51a1e2041d064c94cc8"
+    expected_sha256 = "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
     if license_sha256 != expected_sha256:
-        fail("LICENSE content must match the official PolyForm Noncommercial 1.0.0 plain text")
+        fail("LICENSE content must match the official Apache License 2.0 plain text")
 
     notice = (ROOT / "NOTICE").read_text(encoding="utf-8")
     for snippet in (
-        "Required Notice: Copyright (c) 2026 JayHome137.",
-        "OpenCleaner version 1.1.0",
-        "GitHub repository maintainers",
+        "OpenCleaner",
+        "Copyright 2026 JayHome137",
+        "Licensed under the Apache License, Version 2.0.",
+        "THIRD_PARTY_NOTICES.md",
     ):
         if snippet not in notice:
             fail(f"NOTICE missing expected licensing text: {snippet}")
-
-    commercial = (ROOT / "COMMERCIAL_LICENSE.md").read_text(encoding="utf-8")
-    for snippet in (
-        "Commercial use is not granted",
-        "separate written commercial license",
-        "GitHub repository maintainers",
-        "not itself a commercial license grant",
-    ):
-        if snippet not in commercial:
-            fail(f"COMMERCIAL_LICENSE.md missing expected text: {snippet}")
 
     third_party = (ROOT / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
     for snippet in ("MIT License", "Copyright (c) 2026 数字生命卡兹克"):

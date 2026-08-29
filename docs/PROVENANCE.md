@@ -22,12 +22,12 @@
 | `scripts/validate_package.py` | 已独立重写 | 验证新包结构、契约和无永久删除不变量。 |
 | `open-cleaner/agents/openai.yaml` | 通用 Skill 描述文件，已改写文案 | 只声明当前 Skill 名称、提示语和调用策略。 |
 | `.gitignore` | 初始仓库保留 | 通用开发忽略项，不属于主体实现。 |
-| `LICENSE` | PolyForm 官方标准文本 | 版本 1.0.0 起约束版权所有者拥有的当前实现；文本 SHA-256 由包校验器锁定。 |
-| `NOTICE`、`COMMERCIAL_LICENSE.md`、`VERSION` | 本仓库原创/项目元数据 | 记录 Required Notice、商业授权入口和 1.0.0 生效版本。 |
+| `LICENSE` | Apache License 2.0 官方标准文本 | 版本 1.2.0 起约束版权所有者拥有的当前实现；文本 SHA-256 由包校验器锁定。 |
+| `NOTICE`、`VERSION` | 本仓库原创/项目元数据 | 记录项目版权、第三方声明入口和当前版本。 |
 | `PROJECT_GOALS.md` | 本仓库原创 | 保留。 |
 
 ## 退出标准
 
 当前运行时代码、规则、契约、测试和报告模板均已完成独立替换，发行物不依赖原参考仓库或 Mole 的源码与运行组件。行级证据和保留内容分类见 `docs/INDEPENDENCE_AUDIT.md`。仓库仍保留第三方历史来源及完整 MIT notice，避免重写被误解为抹除既有来源义务。
 
-许可决定已经完成：版本 1.0.0 采用 PolyForm Noncommercial 1.0.0，商业使用需向 JayHome137 取得单独书面许可。历史和第三方 MIT 权利继续保留；详见 `docs/LICENSING_PLAN.md` 和 `THIRD_PARTY_NOTICES.md`。
+许可决定已经完成：版本 1.2.0 起采用 Apache License 2.0。历史版本继续适用其发布时附带的许可证，第三方 MIT 权利继续保留；详见 `docs/LICENSING_PLAN.md` 和 `THIRD_PARTY_NOTICES.md`。

@@ -8,7 +8,7 @@
 ![Python](https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white)
 ![Type](https://img.shields.io/badge/type-Agent%20Skill-7C3AED)
 [![macOS 验证](https://github.com/JayHome137/OpenCleaner-skills/actions/workflows/macos-validation.yml/badge.svg)](https://github.com/JayHome137/OpenCleaner-skills/actions/workflows/macos-validation.yml)
-[![许可证](https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue.svg)](LICENSE)
+[![许可证](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![安全策略](https://img.shields.io/badge/security-policy-blue.svg)](SECURITY.md)
 
 English quick start: [README.en.md](README.en.md)
@@ -195,10 +195,27 @@ python3 scripts/security_scan.py
 - [项目目标](PROJECT_GOALS.md)：产品范围、安全不变量和实现阶段。
 - [来源记录](docs/PROVENANCE.md)：逐文件来源与独立重写说明。
 
+## 验证发布包
+
+每个正式 Release 提供源码归档、`SHA256SUMS` 和 GitHub Artifact Attestation。下载后先验证哈希：
+
+```bash
+shasum -a 256 --check SHA256SUMS
+```
+
+安装 GitHub CLI 后可以继续验证制品是否由本仓库的发布工作流生成：
+
+```bash
+gh attestation verify OpenCleaner-1.2.0.tar.gz \
+  --repo JayHome137/OpenCleaner-skills
+```
+
+Artifact Attestation 使用 GitHub OIDC/Sigstore 签发，不依赖仓库中的长期私钥。
+
 ## 社区与贡献
 
 项目目前保持私有开发，但已经固化了 [贡献指南](CONTRIBUTING.md)、[行为准则](CODE_OF_CONDUCT.md)、[变更记录](CHANGELOG.md) 以及 Issue/PR 模板，后续开放仓库时可直接启用。
 
 ## 许可证
 
-项目许可见 [LICENSE](LICENSE)，商业授权入口见 [COMMERCIAL_LICENSE.md](COMMERCIAL_LICENSE.md)，第三方来源与历史授权见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+OpenCleaner 1.2.0 起采用 [Apache License 2.0](LICENSE)，允许使用、修改和商业分发，同时保留版权、NOTICE 和许可证义务。第三方来源与历史授权见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

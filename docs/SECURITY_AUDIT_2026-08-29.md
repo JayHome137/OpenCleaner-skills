@@ -31,5 +31,7 @@
 
 ## Release boundary
 
-The repository remains private. The PolyForm Noncommercial license is unchanged;
-no MIT/Apache switch, visibility change, tag, or release was performed.
+The repository is public. OpenCleaner 1.2.0 switches the current implementation
+to Apache License 2.0 while retaining third-party notices and historical-version
+license boundaries. Release publication requires a clean privacy scan, matching
+main/tag commit, checksums, and successful macOS CI.

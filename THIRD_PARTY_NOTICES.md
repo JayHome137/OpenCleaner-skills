@@ -2,7 +2,7 @@
 
 ## License boundary
 
-OpenCleaner version 1.0.0 uses the PolyForm Noncommercial License 1.0.0 for the current implementation to the extent that JayHome137 owns the relevant rights. The third-party material and historical upstream content identified below remain governed by their original licenses. The PolyForm license does not replace, restrict, or relicense those third-party grants, and previously distributed MIT versions retain their existing permissions.
+OpenCleaner version 1.2.0 and later use the Apache License 2.0 for the current implementation to the extent that JayHome137 owns the relevant rights. The third-party material and historical upstream content identified below remain governed by their original licenses. Apache-2.0 does not replace, restrict, or relicense those third-party grants, and previously distributed versions retain the permissions granted by the license included with each release.
 
 ## Khazix Skills storage-analyzer
 

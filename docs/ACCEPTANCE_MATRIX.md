@@ -1,12 +1,12 @@
-# 当前工作树验收矩阵（1.1.0 + 安全加固）
+# OpenCleaner 1.2.0 验收矩阵
 
 > 验证日期：2026-08-29
-> 当前基线：`fa5e322`（本轮安全与社区文档修改尚未创建远端发布物）
-> 边界：实现与验证只使用仓库测试数据、系统临时目录和只读本机扫描；没有操作用户真实文件。当前 1.1.0 发布候选已通过本地验收和远端 macOS CI 门禁。
+> 当前基线：1.2.0 发布准备工作树
+> 边界：实现与验证只使用脱敏测试数据、系统临时目录和只读本机扫描；没有操作用户真实文件。
 
 ## 结论
 
-本轮 P0/P1 安全加固已完成本地回归：`119` 项测试全部通过，新增全路径符号链接拒绝和 Trash 原子 staging 覆盖。Windows 公开入口保持关闭，所有者工具内容只展示说明，不提供删除入口；聊天摘要和完整 HTML 两个入口同时保留。远端 CI 尚未对本轮未发布提交重新运行。
+P0/P1 安全加固及 P2 资源限制已完成：`122` 项测试全部通过，覆盖全路径符号链接拒绝、Trash 原子 staging、review token 回收、日志轮转和请求限流。Windows 公开入口保持关闭，所有者工具内容只展示说明，不提供删除入口。
 
 ## 验收结果
 
@@ -14,7 +14,7 @@
 | --- | --- | --- |
 | Skill 形态 | 通过 | 保留 `open-cleaner/SKILL.md`、Agent 元数据和标准包结构；产品形态仍是 macOS 存储分析 Skill。 |
 | 包结构与契约 | 通过 | `python3 scripts/validate_package.py` 通过；scan、analysis、action-plan 使用 `1.1` schema，并验证 `1.0` 输入迁移。 |
-| 单元与安全回归 | 本地通过 | `python3 -m unittest discover -s tests -p 'test_*.py' -q`：`119/119` 通过。除既有覆盖外，新增主目录外符号链接父路径和 Trash staging 回归。 |
+| 单元与安全回归 | 本地通过 | `python3 -m unittest discover -s tests -p 'test_*.py' -q`：`122/122` 通过。除既有覆盖外，包含主目录外符号链接父路径、Trash staging、令牌回收、日志轮转和请求限流。 |
 | 依赖无关安全门 | 本地通过 | `python3 scripts/security_scan.py`：检查永久删除、shell/eval/exec 表面和运行时语法；这是 CI 绊线，不替代人工审计。 |
 | Dry Run 边界 | 通过 | Dry Run 明确标记 `purpose=dry-run`、`dry_run=true`；服务端和文件操作内核均拒绝把 Dry Run 当作执行会话。 |
 | 决策闭环 | 本地通过 | 首页按 action plan 展示“扫描发现 / 当前可行动 / 当前被阻止”；真实本机计划为 `trash=0`、`reviewed_trash=10`、`open=105`、阻止 `25`。 |
@@ -27,7 +27,7 @@
 | 目录浏览与本地设置 | 本地通过 | 登记根内支持逐层进入、返回、搜索、名称/大小/时间排序、大小筛选和多选保护；设置文件 `0600`、状态目录 `0700`，拒绝 symlink 和越界根。 |
 | 安装包与 App 归属 | 本地通过 | DMG/PKG/ISO/XIP/ZIP 专项视图，以及 Bundle ID、显示名、容器、缓存、Application Support、登录项和后台项关系进入版本化 analysis。 |
 | 扩展运行态保护 | 本地通过 | SQLite WAL/SHM、打开文件、共享 Bundle ID、多版本 App、持久保护路径/App、活动进程和未知状态均在服务端执行前失败关闭。 |
-| macOS 端到端 | 本地与远端通过 | 当前工作树 `python3 tests/macos_smoke.py` 输出 `MACOS_SMOKE_OK`；Trash 只处理临时 HOME fixture。当前 [macOS run 32978425355](https://github.com/JayHome137/OpenCleaner-skills/actions/runs/32978425355) 通过。 |
+| macOS 端到端 | 本地与远端通过 | `python3 tests/macos_smoke.py` 输出 `MACOS_SMOKE_OK`；Trash 只处理临时 HOME fixture。最近基线 [macOS run 33257420171](https://github.com/JayHome137/OpenCleaner-skills/actions/runs/33257420171) 通过。 |
 | Windows 公开入口 | 关闭并失败关闭 | 规则归一化、公开扫描、分类、action-plan 契约和文件操作均拒绝 Windows；自动公开入口未恢复。 |
 | Windows 实验资产 | 保留、未验证 | Windows helper、规则、参考文档和 `tests/windows_smoke.py` 留待独立测试；历史 [run 32550508708](https://github.com/JayHome137/OpenCleaner-skills/actions/runs/32550508708) 不代表当前版本。 |
 | 扫描确定性 | 通过 | 当前 macOS-only benchmark 的 1 worker 与 4 workers 输出相同 SHA-256：`8f21768b6b8ce22a0c26ee6743df17e1678a26eb588896c7a3c4885ef6b1bb12`；耗时仅作本机回归参考。 |
@@ -37,8 +37,8 @@
 | 本机真实报告对账 | 本地通过但有覆盖缺口 | 两次只读扫描均为 `25` 个根请求、`24` 个完成、`1` 个跳过，调度 `3,167` 个路径、报告 `130` 项、`23` 个错误（`22` 权限拒绝 + `1` 缺失根）。Dry Run 两次均为 `115` 个计划动作、`25` 项阻止；缓存因扫描错误保持未发布。扫描 source hash 随实时字段变化是预期行为。两次 APFS open-unlinked 诊断分别为 `138/136` 个。临时验证产物仍保留，未删除用户数据。 |
 | 实现独立性 | 通过（代码层） | 运行时代码、规则、契约、测试和报告不依赖 Mole 或原参考仓库主体；详见 `docs/INDEPENDENCE_AUDIT.md`。 |
 | 第三方声明 | 通过 | `THIRD_PARTY_NOTICES.md` 和 `docs/PROVENANCE.md` 保留来源及既有 MIT 义务。 |
-| 正式非商业/商业许可 | 通过 | `1.1.0` 继续采用官方 PolyForm Noncommercial 1.0.0；`NOTICE`、`COMMERCIAL_LICENSE.md` 和第三方 MIT 边界保持一致。 |
-| 远端 CI | 待本轮提交后复核 | 上一基线 run `32978425355` 通过；本轮新增安全门和 119 项测试尚未推送，因此不宣称远端已验证。 |
+| 正式许可证 | 通过 | `1.2.0` 起采用官方 Apache License 2.0；`NOTICE` 和第三方 MIT 边界保持一致。 |
+| 远端 CI | 发布提交后复核 | 发布前要求包校验、安全门、122 项测试和 macOS smoke 全部通过。 |
 
 ## 真实本机 Dry Run 摘要
 
@@ -73,7 +73,7 @@ git diff --check
 
 Windows 实验 smoke 当前不属于发行验证命令；恢复公开入口前必须另行完成原生 runner 与真实桌面测试。
 
-## 后续候选（不阻塞 1.1.0）
+## 后续候选（不阻塞 1.2.0）
 
 - Full Disk Access 后的完整覆盖复扫体验；
 - 更丰富的历史导出与两次扫描容量对比；
@@ -83,6 +83,6 @@ Windows 实验 smoke 当前不属于发行验证命令；恢复公开入口前�
 
 这些候选都不授予新的删除权限，也不改变所有者工具只展示的决策。
 
-## 商业化前事项
+## 许可边界
 
-正式对外签署商业合同时，由适用司法辖区的专业律师审阅具体合同条款。该事项不影响 `1.1.0` 的技术验收。
+Apache-2.0 允许商业使用，但使用者仍需遵守许可证、NOTICE、第三方 notice 和商标边界。本记录不是法律意见。

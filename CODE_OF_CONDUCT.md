@@ -9,5 +9,6 @@ backgrounds, and careful handling of security reports and personal data.
 Harassment, discrimination, doxxing, threats, malicious uploads, and attempts
 to obtain or delete another person's data are not acceptable.
 
-Report conduct concerns privately to `GitHub repository maintainers`. The maintainer may
-remove content, restrict participation, or request a correction when needed.
+Report sensitive concerns through the maintainer's GitHub profile or the
+repository's private security-reporting channel. The maintainer may remove
+content, restrict participation, or request a correction when needed.
