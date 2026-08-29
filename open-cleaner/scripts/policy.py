@@ -230,18 +230,36 @@ class SafetyPolicy:
         self._ownership_apps: Optional[list[dict[str, str]]] = None
 
     def _reject_user_symlink_components(self, original: str) -> None:
-        if not is_within(original, self.home_input):
-            if os.path.islink(original):
-                raise PolicyError("symlink_denied", f"拒绝符号链接目标：{original}")
-            return
-        current = original
-        while os.path.normcase(current) != os.path.normcase(self.home_input):
-            if os.path.islink(current):
-                raise PolicyError("symlink_denied", f"拒绝主目录内的符号链接路径：{original}")
-            parent = os.path.dirname(current)
-            if parent == current:
+        """Reject symlinks in every existing path component.
+
+        The previous implementation only walked components under the user's
+        home directory.  A symlink such as ``/private/tmp/alias`` could
+        therefore redirect a reviewed target into Downloads or another
+        allowlisted root.  Walk from the filesystem root so the policy's
+        "no symlink path" invariant is independent of the original prefix.
+        """
+        expanded = os.path.abspath(os.path.expanduser(original))
+        current = os.path.sep
+        # macOS exposes these stable system aliases on normal paths (for
+        # example TemporaryDirectory commonly lives below ``/var``).  They
+        # are not user-controlled redirections; every subsequent component
+        # is still checked with lstat, including aliases such as
+        # ``/private/tmp/alias``.
+        system_aliases = {os.path.normcase("/var"), os.path.normcase("/tmp")}
+        for component in Path(expanded).parts:
+            if component in ("", os.path.sep):
+                continue
+            current = os.path.join(current, component)
+            try:
+                info = os.lstat(current)
+            except FileNotFoundError:
+                # The later identity check reports a precise missing-path
+                # error.  Non-existent descendants cannot be symlinks yet.
                 break
-            current = parent
+            except OSError as exc:
+                raise PolicyError("path_unreadable", f"无法检查路径组件：{current}") from exc
+            if stat.S_ISLNK(info.st_mode) and os.path.normcase(current) not in system_aliases:
+                raise PolicyError("symlink_denied", f"拒绝符号链接路径：{original}")
 
     def _exact_protected_roots(self) -> tuple[str, ...]:
         roots = [

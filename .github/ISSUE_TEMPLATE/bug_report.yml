@@ -1,0 +1,27 @@
+name: Bug report
+description: Report a reproducible behavior problem
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include personal paths, tokens, screenshots of private data, or security-sensitive details.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Include the smallest fixture and the expected versus actual result.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: macOS and Python version
+    validations:
+      required: true

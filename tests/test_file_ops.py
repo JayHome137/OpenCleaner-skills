@@ -67,7 +67,9 @@ class FileOperationTests(unittest.TestCase):
         operator = FileOperator(self.policy, log, trash_handler=move)
         result = operator.execute(self.action, "plan-1", "session")
         self.assertEqual(result["status"], "completed")
-        self.assertEqual(called, [str(self.target.resolve())])
+        self.assertEqual(len(called), 1)
+        self.assertIn(".open-cleaner-stage-", called[0])
+        self.assertTrue(called[0].endswith("/archive.zip"))
         entries = [json.loads(line) for line in log.path.read_text(encoding="utf-8").splitlines()]
         self.assertEqual(entries[0]["status"], "started")
         entry = entries[-1]

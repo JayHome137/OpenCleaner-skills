@@ -341,7 +341,9 @@ class ServerContextTests(unittest.TestCase):
             self.assertTrue(payload["ok"])
             self.assertFalse(payload["results"][0]["target_exists_after"])
             self.assertIn("disk_free_delta_bytes", payload["results"][0])
-            self.assertEqual(called, [str(target.resolve())])
+            self.assertEqual(len(called), 1)
+            self.assertIn(".open-cleaner-stage-", called[0])
+            self.assertTrue(called[0].endswith("/one"))
         finally:
             server.shutdown()
             server.server_close()
@@ -531,7 +533,9 @@ class ServerContextTests(unittest.TestCase):
         response = context.execute([review_ids[0]], review_token=valid["review_token"])
         self.assertTrue(response["ok"])
         self.assertTrue(context.review_tokens[valid["review_token"]]["used"])
-        self.assertEqual(called, [str(first.resolve())])
+        self.assertEqual(len(called), 1)
+        self.assertIn(".open-cleaner-stage-", called[0])
+        self.assertTrue(called[0].endswith("/first.zip"))
         context.completed.clear()
         with self.assertRaises(PolicyError) as raised:
             context.execute([review_ids[0]], review_token=valid["review_token"])
@@ -607,7 +611,9 @@ class ServerContextTests(unittest.TestCase):
                 completed = json.loads(response.read())
         self.assertTrue(completed["ok"])
         self.assertEqual(completed["results"][0]["mode"], "reviewed_trash")
-        self.assertEqual(called, [str(target.resolve())])
+        self.assertEqual(len(called), 1)
+        self.assertIn(".open-cleaner-stage-", called[0])
+        self.assertTrue(called[0].endswith("/archive.zip"))
 
     def test_http_validates_full_batch_before_first_side_effect(self) -> None:
         first = self.make_cache("one")
@@ -647,7 +653,9 @@ class ServerContextTests(unittest.TestCase):
             for thread in threads:
                 thread.join(timeout=3)
         self.assertEqual(sorted(statuses), [200, 409])
-        self.assertEqual(called, [str(target.resolve())])
+        self.assertEqual(len(called), 1)
+        self.assertIn(".open-cleaner-stage-", called[0])
+        self.assertTrue(called[0].endswith("/one"))
 
 
 if __name__ == "__main__":

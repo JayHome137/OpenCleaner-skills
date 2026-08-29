@@ -1,9 +1,12 @@
 # OpenCleaner
 
+English quick start: [README.en.md](README.en.md).
+
 面向 Codex 和其他 AI Agent 的 macOS 存储分析 Skill：只读扫描磁盘占用，生成中文分级报告，并通过确定性规则提供受控、可恢复的文件处置。
 
 [![macOS 验证](https://github.com/JayHome137/OpenCleaner-skills/actions/workflows/macos-validation.yml/badge.svg)](https://github.com/JayHome137/OpenCleaner-skills/actions/workflows/macos-validation.yml)
 [![许可证](https://img.shields.io/badge/license-PolyForm%20Noncommercial-blue.svg)](LICENSE)
+[![安全策略](https://img.shields.io/badge/security-policy-blue.svg)](SECURITY.md)
 
 ## 核心能力
 
@@ -26,6 +29,27 @@ OpenCleaner 不提供永久删除、系统目录自动清理、管理员权限�
 矩阵中的“完整”表示该能力已经进入当前 macOS 工作流并通过对应验证；它不代表绕过确认或扩大处置权限。平台范围和验证边界见下文。
 
 ## 快速开始
+
+### 30 秒体验
+
+下面的流程只生成临时报告和 Dry Run，不会改动任何真实文件：
+
+```bash
+git clone https://github.com/JayHome137/OpenCleaner-skills.git
+cd OpenCleaner-skills/open-cleaner
+python3 scripts/scan.py --progress > /tmp/open-cleaner-scan.json
+python3 scripts/classify.py /tmp/open-cleaner-scan.json /tmp/open-cleaner-analysis.json
+python3 scripts/validate_plan.py /tmp/open-cleaner-analysis.json > /tmp/open-cleaner-plan.json
+python3 scripts/summarize.py /tmp/open-cleaner-analysis.json /tmp/open-cleaner-plan.json
+```
+
+确认摘要后，才启动带有受控交互的本地页面：
+
+```bash
+python3 scripts/server.py /tmp/open-cleaner-analysis.json
+```
+
+报告中的颜色含义是：绿色可按确定性规则移入废纸篓，橙色需要逐项人工确认，红色只展示并说明原因。所有动作都可恢复，不提供永久删除入口。
 
 ### 安装 Skill
 
@@ -78,6 +102,8 @@ python3 scripts/build_report.py /tmp/storage-analysis.json ~/Desktop/storage-rep
 
 ## 安全设计
 
+完整的本地威胁模型、报告漏洞方式和残余风险见 [SECURITY.md](SECURITY.md)。
+
 - 扫描阶段严格只读，不修改被扫描目录。
 - Agent 不能把未知路径提升为可执行目标。
 - Dry Run 不可执行；受控操作由服务端重新生成 30 分钟有效的 session plan。
@@ -127,11 +153,16 @@ python3 scripts/build_report.py /tmp/storage-analysis.json ~/Desktop/storage-rep
 python3 scripts/validate_package.py
 python3 -m unittest discover -s tests -p 'test_*.py' -v
 python3 scripts/benchmark_scan.py
+python3 scripts/security_scan.py
 ```
 
 - [验收矩阵](docs/ACCEPTANCE_MATRIX.md)：本地与 GitHub runner 证据、验证边界和当前状态。
 - [项目目标](PROJECT_GOALS.md)：产品范围、安全不变量和实现阶段。
 - [来源记录](docs/PROVENANCE.md)：逐文件来源与独立重写说明。
+
+## 社区与贡献
+
+项目目前保持私有开发，但已经固化了 [贡献指南](CONTRIBUTING.md)、[行为准则](CODE_OF_CONDUCT.md)、[变更记录](CHANGELOG.md) 以及 Issue/PR 模板，后续开放仓库时可直接启用。
 
 ## 许可证
 

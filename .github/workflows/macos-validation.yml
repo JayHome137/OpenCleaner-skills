@@ -16,10 +16,13 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Validate package
         run: python3 scripts/validate_package.py
+
+      - name: Run dependency-free security guard
+        run: python3 scripts/security_scan.py
 
       - name: Run unit tests
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v

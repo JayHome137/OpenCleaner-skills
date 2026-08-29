@@ -351,6 +351,24 @@ class PolicyTests(unittest.TestCase):
             self.policy.authorize(str(link), "trash", "green")
         self.assertEqual(raised.exception.code, "symlink_denied")
 
+    @unittest.skipUnless(sys.platform == "darwin", "macOS temporary-root semantics require macOS")
+    def test_symlink_parent_outside_home_is_rejected(self) -> None:
+        downloads = self.home / "Downloads"
+        downloads.mkdir()
+        target = downloads / "outside-alias.zip"
+        target.write_bytes(b"data")
+        alias = Path(tempfile.mkdtemp(prefix="open-cleaner-alias-")) / "alias"
+        alias.symlink_to(downloads, target_is_directory=True)
+        try:
+            with self.assertRaises(PolicyError) as raised:
+                self.policy.authorize(
+                    str(alias / target.name), "reviewed_trash", "yellow"
+                )
+            self.assertEqual(raised.exception.code, "symlink_denied")
+        finally:
+            alias.unlink(missing_ok=True)
+            alias.parent.rmdir()
+
     def test_replaced_target_invalidates_plan(self) -> None:
         target = self.make_review_item()
         action = self.policy.authorize(str(target), "reviewed_trash", "yellow")

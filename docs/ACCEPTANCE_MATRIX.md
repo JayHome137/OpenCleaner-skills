@@ -1,11 +1,12 @@
-# 1.1.0 验收矩阵
+# 当前工作树验收矩阵（1.1.0 + 安全加固）
 
-> 验证日期：2026-08-26
+> 验证日期：2026-08-29
+> 当前基线：`fa5e322`（本轮安全与社区文档修改尚未创建远端发布物）
 > 边界：实现与验证只使用仓库测试数据、系统临时目录和只读本机扫描；没有操作用户真实文件。当前 1.1.0 发布候选已通过本地验收和远端 macOS CI 门禁。
 
 ## 结论
 
-本轮 P0/P1 已完成并跑完本地验收：`115` 项测试全部通过，macOS 临时 fixture、真实只读扫描、Dry Run、静态 HTML 和受控服务桌面/移动浏览器验收均已完成。Windows 公开入口保持关闭，所有者工具内容只展示说明，不提供删除入口；聊天摘要和完整 HTML 两个入口同时保留。
+本轮 P0/P1 安全加固已完成本地回归：`119` 项测试全部通过，新增全路径符号链接拒绝和 Trash 原子 staging 覆盖。Windows 公开入口保持关闭，所有者工具内容只展示说明，不提供删除入口；聊天摘要和完整 HTML 两个入口同时保留。远端 CI 尚未对本轮未发布提交重新运行。
 
 ## 验收结果
 
@@ -13,14 +14,15 @@
 | --- | --- | --- |
 | Skill 形态 | 通过 | 保留 `open-cleaner/SKILL.md`、Agent 元数据和标准包结构；产品形态仍是 macOS 存储分析 Skill。 |
 | 包结构与契约 | 通过 | `python3 scripts/validate_package.py` 通过；scan、analysis、action-plan 使用 `1.1` schema，并验证 `1.0` 输入迁移。 |
-| 单元与安全回归 | 本地通过 | `python3 -m unittest discover -s tests -p 'test_*.py' -q`：`115/115` 通过。覆盖目录浏览、私有设置、保护降权、自定义扫描根、安装包元数据、App 归属、SQLite WAL/SHM、打开文件、共享 App 身份、多版本 App、Git 检查点、多构建系统和既有安全回归。 |
+| 单元与安全回归 | 本地通过 | `python3 -m unittest discover -s tests -p 'test_*.py' -q`：`119/119` 通过。除既有覆盖外，新增主目录外符号链接父路径和 Trash staging 回归。 |
+| 依赖无关安全门 | 本地通过 | `python3 scripts/security_scan.py`：检查永久删除、shell/eval/exec 表面和运行时语法；这是 CI 绊线，不替代人工审计。 |
 | Dry Run 边界 | 通过 | Dry Run 明确标记 `purpose=dry-run`、`dry_run=true`；服务端和文件操作内核均拒绝把 Dry Run 当作执行会话。 |
 | 决策闭环 | 本地通过 | 首页按 action plan 展示“扫描发现 / 当前可行动 / 当前被阻止”；真实本机计划为 `trash=0`、`reviewed_trash=10`、`open=105`、阻止 `25`。 |
 | 所有者工具边界 | 本地通过 | npm、pnpm、Gradle、Go、Codex、Claude、Xcode DerivedData 等目标只显示归属、原因和建议命令，不生成 Trash action。 |
 | 扫描缓存与进度 | 本地通过 | 私有版本化缓存、直接子项指纹、短 TTL、原子发布、`--progress`/`--no-cache`/`--cache-dir` 和取消语义均有测试；无错误 fixture 首扫 `misses=2` 且 `published=true`、二扫 `hits=2`/`misses=0`、结果哈希一致，状态目录 `0700`、文件 `0600`。 |
 | 覆盖与 APFS 诊断 | 本地通过 | 报告展示完整/可用于初筛/关键区域缺失等级，以及 purgeable、废纸篓、快照、open-unlinked file 的只读解释和重扫建议。 |
 | 双入口交付 | 本地通过 | `summarize.py` 生成聊天摘要；静态与受控 HTML 都嵌入决策数据，完整明细默认折叠；HTML 是只读证据入口，受控页面承接剩余交互。 |
-| 文件操作边界 | 本地通过 | 仅允许 `open`、绿灯 `trash`、黄灯 `reviewed_trash`；两个变更 mode 都复用同一 Trash 内核，没有永久删除回退。副作用前要求日志可写、整批重验和原路径复核。 |
+| 文件操作边界 | 本地通过 | 仅允许 `open`、绿灯 `trash`、黄灯 `reviewed_trash`；目标先在同一父目录原子改名到私有 staging，再交给 Trash，没有永久删除回退。副作用前要求日志可写、整批重验和原路径复核。 |
 | 项目生成目录阶段 | 本地通过 | 仅发现 allowlist 生成目录；要求项目清单、Git ignored/untracked、发布产物排除、30 分钟静置、打开文件检查、当前用户、黄灯令牌和执行前重验。 |
 | 目录浏览与本地设置 | 本地通过 | 登记根内支持逐层进入、返回、搜索、名称/大小/时间排序、大小筛选和多选保护；设置文件 `0600`、状态目录 `0700`，拒绝 symlink 和越界根。 |
 | 安装包与 App 归属 | 本地通过 | DMG/PKG/ISO/XIP/ZIP 专项视图，以及 Bundle ID、显示名、容器、缓存、Application Support、登录项和后台项关系进入版本化 analysis。 |
@@ -36,7 +38,7 @@
 | 实现独立性 | 通过（代码层） | 运行时代码、规则、契约、测试和报告不依赖 Mole 或原参考仓库主体；详见 `docs/INDEPENDENCE_AUDIT.md`。 |
 | 第三方声明 | 通过 | `THIRD_PARTY_NOTICES.md` 和 `docs/PROVENANCE.md` 保留来源及既有 MIT 义务。 |
 | 正式非商业/商业许可 | 通过 | `1.1.0` 继续采用官方 PolyForm Noncommercial 1.0.0；`NOTICE`、`COMMERCIAL_LICENSE.md` 和第三方 MIT 边界保持一致。 |
-| 远端 CI | 通过 | [macOS run 32978425355](https://github.com/JayHome137/OpenCleaner-skills/actions/runs/32978425355) 对应 `93a6c0c`，包校验、`115` 项单元测试和 macOS 端到端 smoke 全部成功。 |
+| 远端 CI | 待本轮提交后复核 | 上一基线 run `32978425355` 通过；本轮新增安全门和 119 项测试尚未推送，因此不宣称远端已验证。 |
 
 ## 真实本机 Dry Run 摘要
 

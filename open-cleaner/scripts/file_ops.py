@@ -8,11 +8,19 @@ import shutil
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Union
 
-from policy import PolicyError, SafetyPolicy, isoformat, utc_now
+from policy import (
+    PolicyError,
+    SafetyPolicy,
+    capture_identity,
+    identities_match,
+    isoformat,
+    utc_now,
+)
 
 
 class FileOperationError(OSError):
@@ -181,6 +189,64 @@ def move_to_trash(path: str) -> None:
         raise FileOperationError("当前版本的废纸篓操作仅支持 macOS")
 
 
+def _restore_without_overwrite(staged_path: str, original_path: str) -> bool:
+    """Restore a staged target only when the original name is still free."""
+    if os.path.lexists(original_path):
+        return False
+    try:
+        os.rename(staged_path, original_path)
+    except OSError:
+        return False
+    return True
+
+
+def _stage_for_trash(path: str, expected_identity: Mapping[str, Any]) -> tuple[str, str]:
+    """Atomically detach *path* before handing it to a Trash implementation.
+
+    The identity check and the final system Trash call cannot be made one
+    kernel transaction because Finder/``trash`` is an external API.  Renaming
+    into a private sibling directory removes the original name atomically and
+    ensures a later path replacement cannot redirect the Trash call.  If the
+    object at the name changed before the rename, the staged object is kept
+    out of Trash and restored only without overwriting a concurrently-created
+    path.
+    """
+    parent = os.path.dirname(path)
+    stage_dir = tempfile.mkdtemp(prefix=".open-cleaner-stage-", dir=parent)
+    staged_path = os.path.join(stage_dir, os.path.basename(path))
+    try:
+        os.rename(path, staged_path)
+    except OSError as exc:
+        try:
+            os.rmdir(stage_dir)
+        except OSError:
+            pass
+        raise FileOperationError(f"无法安全暂存目标：{exc}") from exc
+
+    try:
+        staged_identity = capture_identity(staged_path)
+    except PolicyError as exc:
+        restored = _restore_without_overwrite(staged_path, path)
+        if restored:
+            try:
+                os.rmdir(stage_dir)
+            except OSError:
+                pass
+        raise FileOperationError(f"暂存目标身份无法确认，已停止操作：{exc}") from exc
+    if not identities_match(expected_identity, staged_identity):
+        restored = _restore_without_overwrite(staged_path, path)
+        if restored:
+            try:
+                os.rmdir(stage_dir)
+            except OSError:
+                pass
+        detail = "目标在复核后发生变化，已停止操作"
+        if not restored:
+            detail += f"；暂存副本保留在：{staged_path}"
+        raise FileOperationError(detail)
+    return staged_path, stage_dir
+
+
 def open_in_file_manager(path: str) -> None:
     if sys.platform == "darwin":
         command = ["/usr/bin/open", "-R", path]
@@ -250,7 +316,39 @@ class FileOperator:
                 target = str(action["canonical_path"])
                 parent = os.path.dirname(target)
                 result["disk_free_before_bytes"] = disk_free_bytes(parent)
-                self.trash_handler(target)
+                staged_path, stage_dir = _stage_for_trash(target, action["identity"])
+                result["staged_path"] = staged_path
+                try:
+                    self.trash_handler(staged_path)
+                except Exception:
+                    # The staging path is still ours when the handler fails;
+                    # restore without replacing a path recreated by another
+                    # process.  Do not fall back to permanent deletion.
+                    restored = _restore_without_overwrite(staged_path, target)
+                    if restored:
+                        try:
+                            os.rmdir(stage_dir)
+                        except OSError:
+                            pass
+                    else:
+                        try:
+                            os.rmdir(stage_dir)
+                        except OSError:
+                            pass
+                    raise
+                try:
+                    os.rmdir(stage_dir)
+                except OSError:
+                    # A successful Trash implementation should consume the
+                    # staged target and leave an empty directory.  If it did
+                    # not, restore the target name when safe and report
+                    # failure rather than hiding residual data.
+                    if _restore_without_overwrite(staged_path, target):
+                        try:
+                            os.rmdir(stage_dir)
+                        except OSError:
+                            pass
+                    raise FileOperationError("废纸篓操作完成但暂存目录未清空，原路径仍然存在或未能确认移走")
                 result["target_exists_after"] = os.path.lexists(target)
                 result["disk_free_after_bytes"] = disk_free_bytes(parent)
                 result["disk_free_delta_bytes"] = (
