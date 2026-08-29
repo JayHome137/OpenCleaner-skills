@@ -1,8 +1,7 @@
 # Contributing
 
-Thanks for helping improve OpenCleaner. The project is currently developed in
-a private repository; contribution access is granted by the maintainer. Small,
-focused pull requests are preferred over broad refactors.
+Thanks for helping improve OpenCleaner. The repository is public and welcomes
+small, focused pull requests over broad refactors.
 
 ## Contribution flow
 
@@ -11,11 +10,13 @@ focused pull requests are preferred over broad refactors.
 3. Add or update a fixture-based regression test before changing policy code.
 4. Run the local checks below and include the concise results in the PR.
 5. Wait for maintainer review; security-sensitive changes are reviewed before
-   any public release.
+   any release.
 
 ## Before opening a change
 
 - Keep the macOS-only public boundary intact.
+- Keep public documentation and release metadata consistent with the current
+  supported version and platform scope.
 - Do not add permanent-delete, elevated-privilege, or unattended-cleanup
   behavior.
 - Preserve the green/yellow/red decision model and owner-managed read-only

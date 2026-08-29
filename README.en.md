@@ -5,6 +5,20 @@ agents. It performs read-only disk analysis, explains green/yellow/red risk
 tiers, and offers only recoverable Trash operations authorized by deterministic
 rules and a short-lived local session.
 
+## Why OpenCleaner
+
+OpenCleaner is for people who want to understand a disk before deciding what
+to do with it. It separates scan facts, deterministic rules, and recoverable
+actions instead of treating every directory named “cache” as disposable.
+
+| Concern | OpenCleaner |
+| --- | --- |
+| Safety | Read-only by default; permitted disposal only moves items to Trash. |
+| Transparency | Green/yellow/red tiers include reasons, paths, exclusions, and recovery guidance. |
+| Agent boundary | An agent can explain a finding but cannot grant deletion permission to an unknown path. |
+
+![Sanitized interactive report preview](docs/assets/open-cleaner-report.png)
+
 ## Quick start
 
 ```bash
@@ -29,6 +43,13 @@ deletes files and never asks for administrator privileges.
 
 See [SECURITY.md](SECURITY.md), [CONTRIBUTING.md](CONTRIBUTING.md), and the
 [Chinese README](README.md) for the full scope and development workflow.
+
+The [release checklist](docs/RELEASE_CHECKLIST.md) documents the reproducible
+validation, archive, checksum, and attestation gates.
+
+The repository is public. Use [Discussions](https://github.com/JayHome137/OpenCleaner-skills/discussions)
+for usage questions and follow [CONTRIBUTING.md](CONTRIBUTING.md) before
+opening a pull request.
 
 OpenCleaner 1.2.0 and later are licensed under the
 [Apache License 2.0](LICENSE). Third-party notices remain in

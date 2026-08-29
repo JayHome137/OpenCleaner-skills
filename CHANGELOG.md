@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Added a sanitized interactive report preview and a public-project guidance
+  section to the README files.
+- Added extracted-release-archive validation, a macOS/Python verification
+  matrix, a tracked-file privacy scan, and a pinned CodeQL workflow.
+- Updated roadmap, security, contribution, and acceptance documentation for
+  the public repository state.
+
 ## 1.2.0 - 2026-08-29
 
 - Hardened path validation to reject symlink components outside the home

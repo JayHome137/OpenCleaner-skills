@@ -40,6 +40,6 @@ actions, and data recovered from a user's Trash.
 
 ## Supported versions
 
-Only the latest `main` commit is actively maintained while the repository is
-private. Historical tags are provided for provenance, not a security support
-promise.
+The latest `main` commit and the latest stable release are actively
+maintained. Historical tags are provided for provenance, not a security
+support promise.

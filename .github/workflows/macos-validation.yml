@@ -12,11 +12,24 @@ permissions:
 
 jobs:
   macos-tests:
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            python: "3.9"
+          - os: macos-15
+            python: "3.13"
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: ${{ matrix.python }}
 
       - name: Validate package
         run: python3 scripts/validate_package.py
@@ -24,8 +37,20 @@ jobs:
       - name: Run dependency-free security guard
         run: python3 scripts/security_scan.py
 
+      - name: Run tracked-file privacy scan
+        run: python3 scripts/privacy_scan.py
+
       - name: Run unit tests
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
 
       - name: Run macOS end-to-end smoke test
         run: python3 tests/macos_smoke.py
+
+      - name: Validate extracted source archive
+        if: matrix.python == '3.13'
+        shell: bash
+        run: |
+          version="$(tr -d '\r\n' < VERSION)"
+          archive="${RUNNER_TEMP}/OpenCleaner-${version}.tar.gz"
+          git archive --format=tar.gz --prefix="OpenCleaner-${version}/" --output="$archive" HEAD
+          python3 scripts/verify_release_archive.py "$archive" --version "$version"

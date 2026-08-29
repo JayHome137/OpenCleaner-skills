@@ -21,6 +21,7 @@
 | `scripts/benchmark_scan.py` | 本仓库原创 | 使用临时 fixture 建立稳定输出、去重和耗时基线。 |
 | `scripts/validate_package.py` | 已独立重写 | 验证新包结构、契约和无永久删除不变量。 |
 | `open-cleaner/agents/openai.yaml` | 通用 Skill 描述文件，已改写文案 | 只声明当前 Skill 名称、提示语和调用策略。 |
+| `scripts/privacy_scan.py`、`scripts/verify_release_archive.py` | 本仓库原创 | 在不引入运行时依赖的前提下检查发行物隐私边界，并从解压后的归档目录重新验证包契约。 |
 | `.gitignore` | 初始仓库保留 | 通用开发忽略项，不属于主体实现。 |
 | `LICENSE` | Apache License 2.0 官方标准文本 | 版本 1.2.0 起约束版权所有者拥有的当前实现；文本 SHA-256 由包校验器锁定。 |
 | `NOTICE`、`VERSION` | 本仓库原创/项目元数据 | 记录项目版权、第三方声明入口和当前版本。 |

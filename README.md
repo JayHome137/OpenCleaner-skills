@@ -8,6 +8,7 @@
 ![Python](https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white)
 ![Type](https://img.shields.io/badge/type-Agent%20Skill-7C3AED)
 [![macOS 验证](https://github.com/JayHome137/OpenCleaner-skills/actions/workflows/macos-validation.yml/badge.svg)](https://github.com/JayHome137/OpenCleaner-skills/actions/workflows/macos-validation.yml)
+[![CodeQL](https://github.com/JayHome137/OpenCleaner-skills/actions/workflows/codeql.yml/badge.svg)](https://github.com/JayHome137/OpenCleaner-skills/actions/workflows/codeql.yml)
 [![许可证](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![安全策略](https://img.shields.io/badge/security-policy-blue.svg)](SECURITY.md)
 
@@ -32,6 +33,22 @@ English quick start: [README.en.md](README.en.md)
 - **本地资源有界**：复核令牌会过期回收，操作日志超过 2 MiB 自动保留近期记录，服务端对单客户端请求做速率限制。
 
 OpenCleaner 不提供永久删除、系统目录自动清理、管理员权限操作、完整应用卸载、系统优化或实时硬件监控。
+
+## 为什么选择 OpenCleaner
+
+OpenCleaner 适合希望先理解、再决定的用户：它把扫描事实、规则依据和可恢复处置分开，避免把“看起来像缓存”的目录直接当成垃圾。与一键式清理工具相比，它更强调：
+
+| 关注点 | OpenCleaner 的做法 |
+| --- | --- |
+| 安全边界 | 默认只读；允许的处置也只进入废纸篓，不提供永久删除或管理员权限。 |
+| 决策透明 | 绿、橙、红三级颜色同时说明原因、路径、非目标和恢复方式。 |
+| AI 角色 | Agent 可以补充解释，但不能把未知路径提升为删除权限。 |
+
+## 交互报告预览
+
+下图来自一次脱敏的临时 HOME fixture；路径、文件和容量均为示例数据，不包含真实用户内容。
+
+![OpenCleaner 交互报告预览](docs/assets/open-cleaner-report.png)
 
 ## 功能矩阵
 
@@ -189,11 +206,13 @@ python3 scripts/validate_package.py
 python3 -m unittest discover -s tests -p 'test_*.py' -v
 python3 scripts/benchmark_scan.py
 python3 scripts/security_scan.py
+python3 scripts/privacy_scan.py
 ```
 
 - [验收矩阵](docs/ACCEPTANCE_MATRIX.md)：本地与 GitHub runner 证据、验证边界和当前状态。
 - [项目目标](PROJECT_GOALS.md)：产品范围、安全不变量和实现阶段。
 - [来源记录](docs/PROVENANCE.md)：逐文件来源与独立重写说明。
+- [发布清单](docs/RELEASE_CHECKLIST.md)：每次 Tag、归档、校验和和 Attestation 的复核步骤。
 
 ## 验证发布包
 
@@ -214,7 +233,7 @@ Artifact Attestation 使用 GitHub OIDC/Sigstore 签发，不依赖仓库中的�
 
 ## 社区与贡献
 
-项目目前保持私有开发，但已经固化了 [贡献指南](CONTRIBUTING.md)、[行为准则](CODE_OF_CONDUCT.md)、[变更记录](CHANGELOG.md) 以及 Issue/PR 模板，后续开放仓库时可直接启用。
+仓库已公开，欢迎围绕安全边界提交 Issue、Pull Request 或在 [Discussions](https://github.com/JayHome137/OpenCleaner-skills/discussions) 提问。请先阅读 [贡献指南](CONTRIBUTING.md)、[行为准则](CODE_OF_CONDUCT.md) 和 [变更记录](CHANGELOG.md)；安全问题请使用 [私密漏洞报告](SECURITY.md)。
 
 ## 许可证
 

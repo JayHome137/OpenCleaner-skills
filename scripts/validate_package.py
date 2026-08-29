@@ -26,11 +26,14 @@ REQUIRED_FILES = [
     ROOT / "docs" / "STATUS_AND_MOLE_GAP_AUDIT_2026-08-26.md",
     ROOT / "docs" / "ROADMAP.md",
     ROOT / "docs" / "SECURITY_AUDIT_2026-08-29.md",
+    ROOT / "docs" / "RELEASE_CHECKLIST.md",
     ROOT / "SECURITY.md",
     ROOT / "CONTRIBUTING.md",
     ROOT / "CODE_OF_CONDUCT.md",
     ROOT / "CHANGELOG.md",
     ROOT / "scripts" / "security_scan.py",
+    ROOT / "scripts" / "verify_release_archive.py",
+    ROOT / "scripts" / "privacy_scan.py",
     ROOT / ".github" / "ISSUE_TEMPLATE" / "bug_report.yml",
     ROOT / ".github" / "ISSUE_TEMPLATE" / "feature_request.yml",
     ROOT / ".github" / "ISSUE_TEMPLATE" / "config.yml",
@@ -143,7 +146,11 @@ def check_licensing() -> None:
 
 
 def check_python_syntax() -> None:
-    python_files = sorted(SCRIPTS_DIR.glob("*.py")) + sorted((ROOT / "tests").glob("*.py"))
+    python_files = (
+        sorted(SCRIPTS_DIR.glob("*.py"))
+        + sorted((ROOT / "scripts").glob("*.py"))
+        + sorted((ROOT / "tests").glob("*.py"))
+    )
     with tempfile.TemporaryDirectory(prefix="storage-pycompile-") as temporary:
         for index, path in enumerate(python_files):
             try:

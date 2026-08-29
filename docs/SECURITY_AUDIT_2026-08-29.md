@@ -26,8 +26,8 @@
   surface is limited to 60 requests per client per 10 seconds.
 - A maintained SAST/dependency scanner can be added when the project gains
   third-party dependencies; the current guard is intentionally stdlib-only.
-- Remote CI should be re-run after each future private push; this audit does
-  not authorize public release.
+- Remote CI should be re-run after each future push. Public release status and
+  release evidence are tracked separately in the release checklist.
 
 ## Release boundary
 

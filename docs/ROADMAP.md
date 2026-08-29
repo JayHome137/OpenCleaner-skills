@@ -1,24 +1,26 @@
 # Roadmap
 
-The project is private while the safety contract and user experience are being
-stabilized. The roadmap is intentionally small and tied to evidence.
+The repository is public. The roadmap remains intentionally small and tied to
+evidence so that safety claims do not outrun verification.
 
-## P0/P1 before public launch
+## Completed for the current public release
 
 - Keep the macOS-only boundary and recoverable Trash invariant covered by CI.
 - Publish a current threat model and security reporting path.
-- Validate the interactive report on a clean macOS fixture and refresh the
-  screenshots/demo before changing repository visibility.
-- Add a reproducible release checklist and a signed checksum for release
-  archives.
+- Validate the interactive report on a clean macOS fixture and publish a
+  sanitized preview.
+- Add a reproducible release checklist, checksum, and keyless artifact
+  attestation for release archives.
+- Run package validation across macOS 14/Python 3.9 and macOS 15/Python 3.13.
+- Keep an English quick start alongside the Chinese product documentation.
 
-## P2 community readiness
+## Next community improvements
 
-- Triage labels and a small set of `good first issue` tasks.
+- Keep triage labels and a small set of `good first issue` tasks current.
 - A changelog entry for every user-visible or safety-relevant change.
-- English quick start alongside the Chinese product documentation.
-- A public discussion/feedback channel only after the private maintainer review
-  process is ready.
+- Use Discussions for usage questions, ideas, and release announcements.
+- Add a maintained SAST/dependency review when the code or dependency surface
+  expands beyond the current standard-library implementation.
 
 Features that broaden deletion scope, run owner tools, or require elevated
 privileges are out of scope for this roadmap.
