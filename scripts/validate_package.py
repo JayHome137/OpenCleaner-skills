@@ -20,6 +20,7 @@ REQUIRED_FILES = [
     ROOT / "docs" / "BASELINE.md",
     ROOT / "docs" / "ACCEPTANCE_MATRIX.md",
     ROOT / "docs" / "LICENSING_PLAN.md",
+    ROOT / "docs" / "LOCAL_AUTHORIZATION_MODES.md",
     ROOT / "docs" / "INDEPENDENCE_AUDIT.md",
     ROOT / "docs" / "PROVENANCE.md",
     ROOT / "docs" / "PERFORMANCE_BASELINE.md",

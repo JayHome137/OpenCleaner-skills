@@ -70,7 +70,14 @@ class ServerContextTests(unittest.TestCase):
         os.utime(path, (old, old))
         return path
 
-    def make_context(self, paths, called, rescan_handler=None):
+    def make_context(
+        self,
+        paths,
+        called,
+        rescan_handler=None,
+        authorization_mode="token",
+        confirmation_handler=None,
+    ):
         green = [
             {"name": path.name, "path": str(path), "trash_paths": [str(path)]}
             for path in paths
@@ -104,8 +111,50 @@ class ServerContextTests(unittest.TestCase):
             plan,
             operator=operator,
             token="test-token",
+            authorization_mode=authorization_mode,
+            confirmation_handler=confirmation_handler,
             rescan_handler=rescan_handler,
         )
+
+    def test_view_only_mode_exposes_no_action_surface(self) -> None:
+        target = self.make_cache("view-only")
+        context = self.make_context([target], [], authorization_mode="view-only")
+        config = context.public_config()
+        self.assertEqual(config["authorization_mode"], "view-only")
+        self.assertEqual(config["endpoint"], "")
+        self.assertEqual(config["review_endpoint"], "")
+        self.assertEqual(config["actions"], [])
+        with self.assertRaises(PolicyError) as raised:
+            context.execute([context.plan["actions"][0]["action_id"]])
+        self.assertEqual(raised.exception.code, "view_only")
+
+    def test_system_confirmation_can_deny_before_side_effect(self) -> None:
+        target = self.make_cache("system-denied")
+        called = []
+        context = self.make_context(
+            [target],
+            called,
+            authorization_mode="system-confirm",
+            confirmation_handler=lambda _actions: False,
+        )
+        with self.assertRaises(PolicyError) as raised:
+            context.execute([context.plan["actions"][0]["action_id"]])
+        self.assertEqual(raised.exception.code, "system_confirmation_denied")
+        self.assertEqual(called, [])
+        self.assertTrue(target.exists())
+
+    def test_system_confirmation_allows_verified_operation(self) -> None:
+        target = self.make_cache("system-allowed")
+        called = []
+        context = self.make_context(
+            [target],
+            called,
+            authorization_mode="system-confirm",
+            confirmation_handler=lambda _actions: True,
+        )
+        response = context.execute([context.plan["actions"][0]["action_id"]])
+        self.assertTrue(response["ok"])
+        self.assertEqual(len(called), 1)
 
     def make_review_context(self, paths, called):
         yellow = [

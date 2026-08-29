@@ -543,13 +543,19 @@ function selectedActions() {
 
 function sessionSection() {
   if (!SESSION) return `<section class="block surface session-bar"><div class="session-copy"><div class="session-title">静态只读副本</div><div class="session-detail">这里保留完整路径和判断依据，但不会显示删除按钮。需要逐项操作时，请通过 OpenCleaner 的受控交互报告进入；静态文件不能获得操作权限。</div></div></section>`;
+  const authorizationLabels = {
+    "token": "浏览器 token：防误调用，不防同一用户下的恶意进程",
+    "system-confirm": "系统确认：每批 Trash 额外要求一次 macOS 可见确认",
+    "view-only": "只读：页面不提供文件操作入口"
+  };
   const trashCount = (SESSION.actions || []).filter(action => action.mode === "trash").length;
   const reviewedCount = (SESSION.actions || []).filter(action => action.mode === "reviewed_trash").length;
   const expires = SESSION.expires_at ? new Date(SESSION.expires_at).toLocaleString() : "未知";
   const rescan = SESSION.rescan_endpoint
     ? `<button class="action-button secondary" type="button" id="rescan-button">重新扫描</button>`
     : "";
-  return `<section class="block surface session-bar"><div class="session-copy"><div class="session-title">受控清理会话</div><div class="session-detail">${trashCount} 个目标通过实时重验，可安全移入废纸篓${reviewedCount ? ` · ${reviewedCount} 个受限目标可逐项人工复核` : ""} · 会话有效至 ${h(expires)}</div></div>${rescan}</section>`;
+  const mode = authorizationLabels[SESSION.authorization_mode] || authorizationLabels.token;
+  return `<section class="block surface session-bar"><div class="session-copy"><div class="session-title">受控清理会话</div><div class="session-detail">${trashCount} 个目标通过实时重验，可安全移入废纸篓${reviewedCount ? ` · ${reviewedCount} 个受限目标可逐项人工复核` : ""} · 授权模式：${h(mode)} · 会话有效至 ${h(expires)}</div></div>${rescan}</section>`;
 }
 
 function workspaceSection() {

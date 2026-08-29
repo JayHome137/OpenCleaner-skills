@@ -10,9 +10,11 @@ mutating modes only move an authorized path to the macOS Trash.
 """
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import secrets
+import subprocess
 import sys
 import threading
 import time
@@ -30,6 +32,7 @@ REVIEW_TOKEN_TTL_SECONDS = 120
 MAX_REVIEW_TOKENS = 256
 REQUEST_RATE_WINDOW_SECONDS = 10.0
 REQUEST_RATE_LIMIT = 60
+AUTHORIZATION_MODES = ("token", "system-confirm", "view-only")
 
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
@@ -55,6 +58,34 @@ def configure_text_output() -> None:
             stream.reconfigure(encoding="utf-8", errors="replace")
 
 
+def confirm_with_macos_dialog(actions: Sequence[Mapping[str, Any]]) -> bool:
+    mutating = [action for action in actions if action.get("mode") in ("trash", "reviewed_trash")]
+    if not mutating:
+        return True
+    names = [str(action.get("name") or Path(str(action.get("path", ""))).name) for action in mutating]
+    preview = "、".join(names[:3])
+    if len(names) > 3:
+        preview += f" 等 {len(names)} 项"
+    message = f"OpenCleaner 请求将以下目标移入废纸篓：\n{preview}\n\n此确认由 macOS 单独显示。"
+    script = (
+        f"display dialog {json.dumps(message)} "
+        'with title "OpenCleaner 系统确认" '
+        'buttons {"取消", "移入废纸篓"} default button "移入废纸篓" '
+        'cancel button "取消" with icon caution'
+    )
+    try:
+        result = subprocess.run(
+            ["/usr/bin/osascript", "-e", script],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0
+
+
 class ServerContext:
     def __init__(
         self,
@@ -64,6 +95,8 @@ class ServerContext:
         plan: dict[str, Any],
         operator: Optional[FileOperator] = None,
         token: Optional[str] = None,
+        authorization_mode: str = "token",
+        confirmation_handler: Optional[Callable[[Sequence[Mapping[str, Any]]], bool]] = None,
         rescan_handler: Optional[Callable[[], dict[str, Any]]] = None,
         settings_store: Optional[SettingsStore] = None,
     ) -> None:
@@ -78,6 +111,10 @@ class ServerContext:
         self.plan = plan
         self.operator = operator or FileOperator(policy, OperationLog())
         self.token = token or secrets.token_urlsafe(32)
+        if authorization_mode not in AUTHORIZATION_MODES:
+            raise PolicyError("invalid_authorization_mode", "本地授权模式无效")
+        self.authorization_mode = authorization_mode
+        self.confirmation_handler = confirmation_handler or confirm_with_macos_dialog
         self.rescan_handler = rescan_handler
         self.settings_store = settings_store or policy.settings_store
         self.actions = {action["action_id"]: action for action in plan["actions"]}
@@ -113,12 +150,14 @@ class ServerContext:
         return True
 
     def public_config(self) -> dict[str, Any]:
+        interactive = self.authorization_mode != "view-only"
         return {
+            "authorization_mode": self.authorization_mode,
             "token": self.token,
-            "endpoint": "/action",
+            "endpoint": "/action" if interactive else "",
             "review_endpoint": "/review" if any(
                 action["mode"] == "reviewed_trash" for action in self.plan["actions"]
-            ) else "",
+            ) and interactive else "",
             "rescan_endpoint": "/rescan" if self.rescan_handler else "",
             "browse_endpoint": "/browse",
             "settings_endpoint": "/settings",
@@ -143,7 +182,7 @@ class ServerContext:
                     "size_estimate_bytes": action.get("size_estimate_bytes", 0),
                     **({"runtime": action["runtime"]} if action.get("runtime") else {}),
                 }
-                for action in self.plan["actions"]
+                for action in self.plan["actions"] if interactive
             ],
         }
 
@@ -267,6 +306,8 @@ class ServerContext:
         return actions
 
     def review(self, action_ids: Sequence[str]) -> dict[str, Any]:
+        if self.authorization_mode == "view-only":
+            raise PolicyError("view_only", "当前会话为只读模式，不签发复核令牌")
         self.purge_review_tokens()
         if len(self.review_tokens) >= MAX_REVIEW_TOKENS:
             raise PolicyError("review_token_limit", "人工复核令牌数量达到上限，请重新扫描后再试")
@@ -295,6 +336,8 @@ class ServerContext:
         action_ids: Sequence[str],
         review_token: Optional[str] = None,
     ) -> dict[str, Any]:
+        if self.authorization_mode == "view-only":
+            raise PolicyError("view_only", "当前会话为只读模式，不执行文件操作")
         self.purge_review_tokens(preserve=review_token)
         ensure_plan_fresh(self.plan)
         actions = self._resolve_actions(action_ids)
@@ -321,6 +364,8 @@ class ServerContext:
         self.policy.runtime_inspector.refresh_open_file_snapshot()
         for action in actions:
             self.policy.revalidate(action)
+        if self.authorization_mode == "system-confirm" and not self.confirmation_handler(actions):
+            raise PolicyError("system_confirmation_denied", "macOS 系统确认已取消或不可用")
         if token_record is not None:
             token_record["used"] = True
 
@@ -355,6 +400,8 @@ def create_context(
     platform: Optional[str] = None,
     environment: Optional[Mapping[str, str]] = None,
     state_dir: Optional[str] = None,
+    authorization_mode: str = "token",
+    confirmation_handler: Optional[Callable[[Sequence[Mapping[str, Any]]], bool]] = None,
 ) -> ServerContext:
     analysis = load_json_object(analysis_path)
     validate_analysis(analysis)
@@ -415,6 +462,8 @@ def create_context(
         policy,
         plan,
         operator=operator,
+        authorization_mode=authorization_mode,
+        confirmation_handler=confirmation_handler,
         rescan_handler=rescan_current,
         settings_store=settings_store,
     )
@@ -528,6 +577,9 @@ def make_handler(context: ServerContext) -> type[BaseHTTPRequestHandler]:
             if request.get("plan_id") != context.plan["plan_id"]:
                 self._send(409, {"ok": False, "error": "操作计划已经变化"})
                 return
+            if context.authorization_mode == "view-only" and self.path != "/rescan":
+                self._send(409, {"ok": False, "error": "当前会话为只读模式", "code": "view_only"})
+                return
             try:
                 with context.lock:
                     if self.path == "/rescan":
@@ -567,11 +619,20 @@ def make_handler(context: ServerContext) -> type[BaseHTTPRequestHandler]:
 
 def main() -> None:
     configure_text_output()
-    if len(sys.argv) != 2:
-        print(__doc__)
-        raise SystemExit(2)
+    parser = argparse.ArgumentParser(description="启动 OpenCleaner 本地交互报告")
+    parser.add_argument("analysis", help="analysis JSON 路径")
+    parser.add_argument(
+        "--authorization-mode",
+        choices=AUTHORIZATION_MODES,
+        default="token",
+        help="token（默认）、system-confirm（每批 Trash 额外弹出 macOS 确认）或 view-only",
+    )
+    arguments = parser.parse_args()
     try:
-        context = create_context(sys.argv[1])
+        context = create_context(
+            arguments.analysis,
+            authorization_mode=arguments.authorization_mode,
+        )
     except (ContractError, PolicyError, OSError) as exc:
         print(f"报告服务启动失败：{exc}", file=sys.stderr)
         raise SystemExit(1) from exc
@@ -584,6 +645,7 @@ def main() -> None:
     )
     open_count = sum(1 for action in context.plan["actions"] if action["mode"] == "open")
     print(f"报告服务已启动：{url}")
+    print(f"本地授权模式：{context.authorization_mode}")
     print(
         f"绿灯可移到废纸篓 {trash_count} 项 | 黄灯可人工复核 {reviewed_count} 项 | "
         f"可打开查看 {open_count} 项 | "

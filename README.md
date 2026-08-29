@@ -101,6 +101,8 @@ python3 scripts/server.py /tmp/storage-analysis.json
 
 本地服务绑定 `127.0.0.1` 的随机端口，并使用随机 token。浏览器只提交 action ID；黄灯复核额外提交服务端签发的一次性令牌，不提交路径或操作类型。
 
+实验分支 `codex/local-auth-modes` 还提供 `system-confirm` 和 `view-only` 两种可选模式；威胁边界和选择建议见 [本地授权模式](docs/LOCAL_AUTHORIZATION_MODES.md)。该实验架构不会在未经复核时合并到 `main`。
+
 项目开发阶段已经完成测试/构建、源码已有可恢复检查点且相关进程已退出时，可以改用项目阶段分析：
 
 ```bash
